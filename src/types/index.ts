@@ -57,6 +57,10 @@ export type TimelineItem =
       phase: Phase;
     }
   | {
+      type: 'snap';
+      phase: Phase;
+    }
+  | {
       type: 'end';
     };
 

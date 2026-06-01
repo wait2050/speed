@@ -31,6 +31,7 @@ export function compileSequence(
   enabledActions?: Set<string>,
   climaxMin?: number,    // 高潮冲刺时长（分钟），默认3
   afterglowMin?: number, // 余韵时长（分钟），默认1
+  snapCounts?: Record<string, number>, // 每阶段打响指次数
 ): CompiledSequence {
   const timeline: TimelineItem[] = [];
   const enabled = phaseConfig?.enabled ?? new Set(['warmup','core','sprint','climax','afterglow','cooldown'] as const);
@@ -275,10 +276,103 @@ export function compileSequence(
   // 结束标记
   timeline.push({ type: 'end' });
 
+  // ---- 插入打响指（仅非热身阶段）----
+  if (snapCounts) {
+    insertSnaps(timeline, snapCounts);
+  }
+
   // ---- 计算统计 ----
   const stats = computeStats(timeline, warmupRounds, coreRounds, sprintRounds);
 
   return { timeline, stats };
+}
+
+// --- 打响指插入 ---
+
+function insertSnaps(timeline: TimelineItem[], snapCounts: Record<string, number>): void {
+  // 收集每个阶段中动作段的时间范围
+  const phaseActions: Map<string, { startIdx: number; endIdx: number; startMs: number; endMs: number }[]> = new Map();
+
+  let acc = 0;
+  let phaseStartIdx = -1;
+  let phaseStartMs = 0;
+  let currentPhase = '';
+
+  for (let i = 0; i < timeline.length; i++) {
+    const item = timeline[i];
+    if (item.type === 'end') break;
+
+    if (item.type === 'action') {
+      if (item.phase !== currentPhase) {
+        // 保存上一个阶段
+        if (currentPhase && phaseStartIdx >= 0) {
+          const list = phaseActions.get(currentPhase) ?? [];
+          list.push({ startIdx: phaseStartIdx, endIdx: i - 1, startMs: phaseStartMs, endMs: acc });
+          phaseActions.set(currentPhase, list);
+        }
+        currentPhase = item.phase;
+        phaseStartIdx = i;
+        phaseStartMs = acc;
+      }
+    }
+
+    if (item.type === 'action' || item.type === 'rest') {
+      acc += item.duration;
+    }
+  }
+
+  // 最后一个阶段
+  if (currentPhase && phaseStartIdx >= 0) {
+    const list = phaseActions.get(currentPhase) ?? [];
+    list.push({ startIdx: phaseStartIdx, endIdx: timeline.length - 1, startMs: phaseStartMs, endMs: acc });
+    phaseActions.set(currentPhase, list);
+  }
+
+  // 插入打响指
+  const insertions: { idx: number; phase: string }[] = [];
+
+  for (const [phase, count] of Object.entries(snapCounts)) {
+    if (phase === 'warmup' || count <= 0) continue; // 热身不插入
+    const segments = phaseActions.get(phase);
+    if (!segments || segments.length === 0) continue;
+
+    // 收集该阶段所有 action item 的索引和相对时间
+    const actionItems: { idx: number; relMs: number }[] = [];
+    for (const seg of segments) {
+      let rel = seg.startMs;
+      for (let i = seg.startIdx; i <= seg.endIdx; i++) {
+        const item = timeline[i];
+        if (item.type === 'action') {
+          actionItems.push({ idx: i, relMs: rel });
+        }
+        if (item.type === 'action' || item.type === 'rest') {
+          rel += item.duration;
+        }
+      }
+    }
+
+    if (actionItems.length === 0) continue;
+
+    // 均匀随机选点（带抖动）
+    const totalActionMs = segments.reduce((s, seg) => s + (seg.endMs - seg.startMs), 0);
+    for (let n = 0; n < count; n++) {
+      const t = (totalActionMs / (count + 1)) * (n + 1) + (Math.random() - 0.5) * (totalActionMs / (count + 1)) * 0.5;
+      // 找到 t 落在哪个 action item 后面
+      let found = false;
+      for (const ai of actionItems) {
+        if (ai.relMs >= t && !found) {
+          insertions.push({ idx: ai.idx + 1, phase });
+          found = true;
+        }
+      }
+    }
+  }
+
+  // 从后往前插入，避免索引错乱
+  insertions.sort((a, b) => b.idx - a.idx);
+  for (const ins of insertions) {
+    timeline.splice(ins.idx, 0, { type: 'snap', phase: ins.phase as any });
+  }
 }
 
 // --- 辅助函数 ---

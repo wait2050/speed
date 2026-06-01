@@ -437,6 +437,16 @@ h2 {
   background: rgba(255,255,255,0.03);
 }
 
+.seq-snap {
+  background: rgba(255,200,50,0.04);
+  justify-content: space-between;
+  padding: 4px 12px;
+}
+.seq-snap .seq-label {
+  font-size: 12px;
+  color: rgba(255,200,50,0.5);
+}
+
 .seq-transition {
   background: rgba(255,255,255,0.02);
   justify-content: center;

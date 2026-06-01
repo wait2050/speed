@@ -18,6 +18,7 @@ function extractItems(timeline: TimelineItem[]): { index: number; item: ActionOr
       result.push({ index: idx, item });
       idx++;
     }
+    // snap 不计入序号（不可编辑，仅展示）
   }
   return result;
 }

@@ -49,6 +49,10 @@ export const Home: React.FC = () => {
   const [climaxMin, setClimaxMin] = useState(3);     // 高潮冲刺 1-5 分钟
   const [afterglowMin, setAfterglowMin] = useState(1); // 余韵 1-3 分钟
 
+  const [snapCounts, setSnapCounts] = useState<Record<string, number>>({
+    core: 0, sprint_start: 0, sprint_accel: 0, sprint_peak: 0, climax: 0, afterglow: 0,
+  });
+
   const togglePhase = useCallback((p: PhaseOption) => {
     setEnabledPhases(prev => {
       const next = new Set(prev);
@@ -82,10 +86,10 @@ export const Home: React.FC = () => {
     // 编译器是纯函数，但用 setTimeout 避免阻塞 UI
     setTimeout(() => {
       const totalMs = prefs.defaultDuration * 1000;
-      const compiled = compileSequence(totalMs, prefs, undefined, { enabled: enabledPhases }, enabledActions, climaxMin, afterglowMin);
+      const compiled = compileSequence(totalMs, prefs, undefined, { enabled: enabledPhases }, enabledActions, climaxMin, afterglowMin, snapCounts);
       dispatch({ type: 'COMPILATION_DONE', payload: compiled });
     }, 50);
-  }, [dispatch, prefs, audioReady, enabledPhases, enabledActions, climaxMin, afterglowMin]);
+  }, [dispatch, prefs, audioReady, enabledPhases, enabledActions, climaxMin, afterglowMin, snapCounts]);
 
   const handleDurationChange = useCallback((val: number) => {
     const newPrefs = { ...prefs, defaultDuration: val };
@@ -200,6 +204,31 @@ export const Home: React.FC = () => {
             >
               {m}′
             </button>
+          ))}
+        </div>
+      </section>
+
+      {/* 打响指次数 */}
+      <section className="phase-toggles">
+        <span className="phase-toggles-label">打响指次数</span>
+        <div className="phase-toggles-row">
+          {([
+            ['core', '核心'], ['sprint_start', '起冲'], ['sprint_accel', '加速'],
+            ['sprint_peak', '顶峰'], ['climax', '高潮'], ['afterglow', '余韵'],
+          ] as [string, string][]).map(([key, label]) => (
+            <span key={key} style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+              <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.2)' }}>{label}</span>
+              {[0, 1, 2, 3, 4].map(n => (
+                <button
+                  key={n}
+                  className={`phase-toggle ${(snapCounts[key] ?? 0) === n ? 'active' : ''}`}
+                  onClick={() => setSnapCounts(prev => ({ ...prev, [key]: n }))}
+                  style={{ padding: '3px 8px', fontSize: 10, minWidth: 24 }}
+                >
+                  {n}
+                </button>
+              ))}
+            </span>
           ))}
         </div>
       </section>

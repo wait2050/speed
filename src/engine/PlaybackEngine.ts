@@ -59,6 +59,7 @@ export class PlaybackEngine {
   private beatBuffers = new Map<SoundType, AudioBuffer>();
   private signalBuffers = new Map<string, AudioBuffer>();
   private voiceBuffers = new Map<string, AudioBuffer>();
+  private snapBuffer: AudioBuffer | null = null;
   private initialized = false;
 
   private timeline: TimelineItem[] = [];
@@ -93,6 +94,9 @@ export class PlaybackEngine {
     this.signalBuffers.set('single_ding', this.makeDing(1));
     this.signalBuffers.set('double_ding', this.makeDing(2));
     this.signalBuffers.set('heavy_beats', this.makeHeavyBeat());
+
+    // 合成打响指音效
+    this.snapBuffer = this.makeSnap();
 
     this.initialized = true;
 
@@ -253,6 +257,11 @@ export class PlaybackEngine {
         if (signalTime > now && signalTime < now + LOOK_AHEAD_MS / 1000) {
           this.playSignal(item.signal, signalTime);
         }
+      }
+
+      // 打响指：经过时立即播放
+      if (item.type === 'snap' && elapsedMs >= accumulatedMs && elapsedMs < accumulatedMs + 500) {
+        this.playSnap();
       }
 
       if (item.type === 'action' || item.type === 'rest') {
@@ -416,5 +425,36 @@ export class PlaybackEngine {
       }
     }
     return buf;
+  }
+
+  /** 合成打响指：极短噪声 + 带通滤波 */
+  private makeSnap(): AudioBuffer {
+    const sr = 44100;
+    const len = Math.ceil(0.03 * sr); // 30ms
+    const buf = new AudioBuffer({ length: len, sampleRate: sr });
+    const ch = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) {
+      const t = i / sr;
+      // 白噪声 × 指数衰减（极快的起音+衰减）
+      const env = Math.exp(-t / 0.004); // 极快衰减
+      ch[i] = (Math.random() * 2 - 1) * 0.6 * env;
+    }
+    return buf;
+  }
+
+  /** 播放打响指 */
+  playSnap(): void {
+    if (!this.ctx || !this.snapBuffer) return;
+    const src = this.ctx.createBufferSource();
+    src.buffer = this.snapBuffer;
+    // 带通滤波器（3kHz 中心）
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.value = 3000;
+    filter.Q.value = 3;
+    const gain = this.ctx.createGain();
+    gain.gain.value = 0.5;
+    src.connect(filter).connect(gain).connect(this.ctx.destination);
+    src.start(this.ctx.currentTime + 0.005);
   }
 }
