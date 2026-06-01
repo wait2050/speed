@@ -26,15 +26,21 @@ const phaseLabels: Record<Phase, string> = {
 
 export const Player: React.FC = () => {
   const { state, dispatch } = useAppState();
-  const compiled = state.compiled!;
+  const compiled = state.compiled;
   const rootRef = useRef<HTMLDivElement>(null);
   const schedulerRef = useRef<PlaybackScheduler | null>(null);
-  const [actionName, setActionName] = useState('');
+  const [actionName, setActionName] = useState('准备开始...');
   const [remainingMs, setRemainingMs] = useState(0);
   const [currentPhase, setCurrentPhase] = useState<Phase>('warmup');
   const [emergencyVisible, setEmergencyVisible] = useState(false);
   const [confirmStop, setConfirmStop] = useState(false);
   const longPressRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // 安全保护：compiled 为空时回退首页
+  if (!compiled) {
+    dispatch({ type: 'RESET' });
+    return null;
+  }
 
   // 屏幕常亮 + 全屏
   useWakeLock(true);
@@ -50,6 +56,8 @@ export const Player: React.FC = () => {
 
   // 启动调度器
   useEffect(() => {
+    if (!compiled || !compiled.timeline.length) return;
+
     const scheduler = new PlaybackScheduler(
       audioEngine,
       (name, remaining, phase) => {
@@ -121,19 +129,19 @@ export const Player: React.FC = () => {
     clearProgress();
   }, [dispatch]);
 
-  const totalMs = compiled.stats.totalDuration;
+  const totalMs = compiled?.stats?.totalDuration ?? 0;
 
   return (
     <div className="page player-page" ref={rootRef}>
       <div className="player-phase">
-        {phaseLabels[currentPhase]}
+        {phaseLabels[currentPhase] ?? '准备中'}
       </div>
 
       <div className="player-action-name">
-        {actionName || '准备开始...'}
+        {actionName}
       </div>
 
-      <Timer remainingMs={remainingMs} totalMs={totalMs} />
+      <Timer remainingMs={remainingMs} totalMs={totalMs > 0 ? totalMs : 60000} />
 
       {/* 紧急退出按钮（角落透明） */}
       <div
