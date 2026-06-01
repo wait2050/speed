@@ -90,16 +90,18 @@ export class AudioEngine {
     this.voicesLoaded = true;
   }
 
-  /** 播放动作语音（在指定时间点） */
-  speakVoice(actionName: string, when?: number): void {
-    if (!this.ctx || !this.initialized) return;
+  /** 播放动作语音，返回语音时长（秒），0 表示无语音 */
+  speakVoice(actionName: string, when?: number): number {
+    if (!this.ctx || !this.initialized) return 0;
     const buf = this.voiceBuffers.get(actionName);
-    if (!buf) return; // 语音还没加载完，静默跳过
+    if (!buf) return 0;
 
     const src = this.ctx.createBufferSource();
     src.buffer = buf;
     src.connect(this.ctx.destination);
-    src.start(when ?? this.ctx.currentTime + 0.01);
+    const t = when ?? this.ctx.currentTime + 0.01;
+    src.start(t);
+    return buf.duration;
   }
 
   /** 检查语音是否已加载 */

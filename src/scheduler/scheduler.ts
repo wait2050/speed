@@ -26,6 +26,7 @@ export class PlaybackScheduler {
   private currentPhase: Phase = 'warmup';
   private currentActionName = '';
   private lastVoiceKey = '';  // 用于检测动作是否切换，触发语音
+  private voiceEndTime = 0;   // 语音结束的绝对 audioContext 时间，在此之前不排节拍
 
   // 已安排的节拍时间点（去重用）
   private scheduledBeats = new Set<number>();
@@ -50,6 +51,7 @@ export class PlaybackScheduler {
     this.scheduledUntil = 0;
     this.scheduledBeats.clear();
     this.lastVoiceKey = '';
+    this.voiceEndTime = 0;
     this.startTime = this.audio.currentTime;
 
     this.scheduleLoop();
@@ -142,21 +144,23 @@ export class PlaybackScheduler {
           }
           this.onUI(item.name, remainingMs, item.phase);
 
-          // 动作切换时播放语音引导
+          // 动作切换时播放语音引导，并记录语音结束时间
           const voiceKey = `action_${accumulatedMs}`;
           if (voiceKey !== this.lastVoiceKey) {
             this.lastVoiceKey = voiceKey;
-            this.audio.speakVoice(item.name);
+            const dur = this.audio.speakVoice(item.name);
+            this.voiceEndTime = this.audio.currentTime + dur;
           }
         } else if (item.type === 'rest') {
           this.currentActionName = '休息中';
           this.onUI('休息中', remainingMs, item.phase);
 
-          // 休息开始也播放语音
+          // 休息开始也播放语音，并记录语音结束时间
           const voiceKey = `rest_${accumulatedMs}`;
           if (voiceKey !== this.lastVoiceKey) {
             this.lastVoiceKey = voiceKey;
-            this.audio.speakVoice('休息中');
+            const dur = this.audio.speakVoice('休息中');
+            this.voiceEndTime = this.audio.currentTime + dur;
           }
         }
       }
@@ -208,6 +212,10 @@ export class PlaybackScheduler {
       }
 
       const beatAbsTime = this.startTime + t / 1000;
+
+      // 语音播放期间不排节拍
+      if (beatAbsTime < this.voiceEndTime) continue;
+
       const beatKey = Math.round(beatAbsTime * 1000);
 
       // 在 look-ahead 窗口内且未安排过
