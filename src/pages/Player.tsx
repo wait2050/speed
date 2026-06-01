@@ -10,7 +10,6 @@ import { computePhaseSegments } from '../scheduler/segments';
 import type { PhaseSegment } from '../scheduler/segments';
 import { audioEngine } from '../audio/engine';
 import { useWakeLock } from '../hooks/useWakeLock';
-import { lockTouch } from '../utils/preventTouch';
 import { saveProgress, clearProgress } from '../storage';
 import type { Phase } from '../types';
 
@@ -28,7 +27,6 @@ const phaseLabels: Record<Phase, string> = {
 
 export const Player: React.FC = () => {
   const { state, dispatch } = useAppState();
-  const rootRef = useRef<HTMLDivElement>(null);
   const schedulerRef = useRef<PlaybackScheduler | null>(null);
 
   const [actionName, setActionName] = useState('准备开始...');
@@ -48,13 +46,6 @@ export const Player: React.FC = () => {
   }, [state.compiled, dispatch]);
 
   useWakeLock(true);
-
-  useEffect(() => {
-    const el = rootRef.current;
-    if (!el) return;
-    const unlock = lockTouch(el);
-    return unlock;
-  }, []);
 
   // 启动调度器
   useEffect(() => {
@@ -168,7 +159,7 @@ export const Player: React.FC = () => {
   }
 
   return (
-    <div className="page player-page" ref={rootRef}>
+    <div className="page player-page">
       {/* 全局进度条 */}
       <ProgressBar
         segments={segments}
