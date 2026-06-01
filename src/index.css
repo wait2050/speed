@@ -491,20 +491,24 @@ h2 {
 .btn-pause {
   background: var(--bg-elevated);
   color: var(--text-primary);
+  min-height: 44px;               /* iOS 触控标准 */
+  min-width: 100px;
   padding: 12px 28px;
   border: 1px solid var(--border);
   border-radius: 24px;
-  font-size: 14px;
+  font-size: 16px;
   cursor: pointer;
 }
 
 .btn-stop {
   background: transparent;
   color: var(--text-secondary);
+  min-height: 44px;
+  min-width: 80px;
   border: 1px solid rgba(255,255,255,0.1);
   padding: 12px 20px;
   border-radius: 24px;
-  font-size: 14px;
+  font-size: 16px;
   cursor: pointer;
 }
 
@@ -671,11 +675,21 @@ h2 {
 
 .progress-bar-track {
   position: relative;
-  height: 6px;
+  height: 20px;                   /* 触区加高 */
   background: rgba(255,255,255,0.06);
   border-radius: 3px;
   cursor: pointer;
   overflow: visible;
+  display: flex;
+  align-items: center;
+}
+.progress-bar-track::before {
+  content: '';
+  position: absolute;
+  left: 0; right: 0;
+  height: 6px;                   /* 视觉条保持 6px */
+  background: inherit;
+  border-radius: 3px;
 }
 
 .progress-segment {

@@ -1,188 +1,118 @@
 // ============================================================
-// Player — 播放页：进度条 + 暂停/继续 + 倒计时
+// Player — 极简播放页：引擎驱动 UI，零闭包问题
 // ============================================================
-import React, { useEffect, useRef, useCallback, useState, useMemo } from 'react';
+import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { useAppState } from '../state/context';
 import { Timer } from '../components/Timer';
 import { ProgressBar } from '../components/ProgressBar';
-import { PlaybackScheduler } from '../scheduler/scheduler';
+import { PlaybackEngine } from '../engine/PlaybackEngine';
+import type { EngineDisplayState } from '../engine/PlaybackEngine';
 import { computePhaseSegments } from '../scheduler/segments';
 import type { PhaseSegment } from '../scheduler/segments';
-import { audioEngine } from '../audio/engine';
-import { useWakeLock } from '../hooks/useWakeLock';
 import { saveProgress, clearProgress } from '../storage';
 import type { Phase } from '../types';
 
-const phaseLabels: Record<Phase, string> = {
-  warmup: '热身',
-  core: '核心',
-  sprint_start: '起冲',
-  sprint_accel: '加速',
-  sprint_peak: '顶峰',
-  climax: '冲刺',
-  afterglow: '余韵',
-  cooldown: '收尾',
-  landing: '着陆',
+const PHASE_LABELS: Record<Phase, string> = {
+  warmup: '热身', core: '核心',
+  sprint_start: '起冲', sprint_accel: '加速', sprint_peak: '顶峰',
+  climax: '冲刺', afterglow: '余韵', cooldown: '收尾', landing: '着陆',
 };
 
 export const Player: React.FC = () => {
   const { state, dispatch } = useAppState();
-  const schedulerRef = useRef<PlaybackScheduler | null>(null);
-
-  const [actionName, setActionName] = useState('准备开始...');
-  const [actionRemainingMs, setActionRemainingMs] = useState(0);
-  const [totalElapsedMs, setTotalElapsedMs] = useState(0);
-  const [currentPhase, setCurrentPhase] = useState<Phase>('warmup');
-  const [isPaused, setIsPaused] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
   const compiled = state.compiled;
+  const engineRef = useRef<PlaybackEngine | null>(null);
 
-  // 安全保护
+  // 显示状态（引擎单向推送）
+  const [ds, setDs] = useState<EngineDisplayState>({
+    actionName: '准备开始...', actionRemainingMs: 0,
+    totalElapsedMs: 0, phase: 'warmup', isPaused: false,
+  });
+
+  // 启动
   useEffect(() => {
-    if (!state.compiled) {
+    if (!compiled?.timeline?.length) {
       dispatch({ type: 'RESET' });
-    }
-  }, [state.compiled, dispatch]);
-
-  useWakeLock(true);
-
-  // 启动调度器
-  useEffect(() => {
-    if (!compiled?.timeline?.length) return;
-
-    audioEngine.resume().catch(() => {});
-
-    try {
-      const s = new PlaybackScheduler(
-        audioEngine,
-        (name, actionRemaining, totalElapsed, phase) => {
-          setActionName(name);
-          setActionRemainingMs(actionRemaining);
-          setTotalElapsedMs(totalElapsed);
-          setCurrentPhase(phase);
-          dispatch({ type: 'UPDATE_PROGRESS', payload: { actionName: name, remainingMs: actionRemaining, phase } });
-        },
-        (phase) => setCurrentPhase(phase),
-        () => {
-          dispatch({ type: 'PLAYBACK_FINISHED' });
-          clearProgress();
-        },
-      );
-
-      schedulerRef.current = s;
-      s.start(compiled.timeline);
-      setIsPaused(false);
-    } catch (e: any) {
-      setError(e?.message ?? '调度器启动失败');
+      return;
     }
 
-    return () => {
-      schedulerRef.current?.stop();
-      schedulerRef.current = null;
-    };
+    const engine = new PlaybackEngine();
+    engineRef.current = engine;
+
+    engine.init().then(() => {
+      engine.setOnUpdate(setDs);
+      engine.start(compiled.timeline);
+    });
+
+    return () => { engine.destroy(); engineRef.current = null; };
   }, [compiled, dispatch]);
 
-  // 定期保存进度
-  useEffect(() => {
-    if (!compiled) return;
-    const timeline = compiled.timeline;
-    const iv = setInterval(() => {
-      if (schedulerRef.current?.isRunning) {
-        saveProgress(timeline, schedulerRef.current.elapsed);
-      }
-    }, 5000);
-    return () => clearInterval(iv);
-  }, [compiled]);
-
-  // 页面切后台自动暂停
+  // 暂停
   useEffect(() => {
     const onVis = () => {
-      const s = schedulerRef.current;
-      if (!s) return;
-      if (document.hidden) {
-        s.pause();
-        setIsPaused(true);
-      } else {
-        s.resume();
-        setIsPaused(false);
-      }
+      const e = engineRef.current;
+      if (!e) return;
+      if (document.hidden) e.pause(); else e.resume();
     };
     document.addEventListener('visibilitychange', onVis);
     return () => document.removeEventListener('visibilitychange', onVis);
   }, []);
 
-  // 暂停 / 继续（直接从调度器读状态，避免闭包陈旧）
+  // 定期存进度
+  useEffect(() => {
+    if (!compiled) return;
+    const iv = setInterval(() => {
+      const e = engineRef.current;
+      if (e?.isRunning && !e.isPaused) {
+        saveProgress(compiled.timeline, e.elapsed);
+      }
+    }, 5000);
+    return () => clearInterval(iv);
+  }, [compiled]);
+
+  // 操作（直接调引擎，零闭包依赖）
   const togglePause = useCallback(() => {
-    const s = schedulerRef.current;
-    if (!s) return;
-    if (s.isRunning) {
-      s.pause();
-      setIsPaused(true);
-    } else {
-      s.resume();
-      setIsPaused(false);
-    }
+    const e = engineRef.current; if (!e) return;
+    e.isPaused ? e.resume() : e.pause();
   }, []);
 
-  // 点击进度条跳转
-  const handleSeek = useCallback((targetMs: number) => {
-    schedulerRef.current?.seek(targetMs);
-    setIsPaused(false);
+  const handleSeek = useCallback((ms: number) => {
+    engineRef.current?.seek(ms);
   }, []);
 
-  // 停止
   const handleStop = useCallback(() => {
-    schedulerRef.current?.stop();
+    engineRef.current?.destroy();
     dispatch({ type: 'RESET' });
     clearProgress();
   }, [dispatch]);
 
-  // 阶段分段
   const segments: PhaseSegment[] = useMemo(
-    () => (compiled ? computePhaseSegments(compiled.timeline) : []),
+    () => compiled ? computePhaseSegments(compiled.timeline) : [],
     [compiled]
   );
-
   const totalMs = compiled?.stats?.totalDuration || 0;
 
   if (!compiled) {
-    return <div className="page player-page"><p style={{ color: '#8888aa' }}>加载失败，返回中...</p></div>;
-  }
-  if (error) {
-    return (
-      <div className="page player-page">
-        <p style={{ color: '#e94560' }}>错误：{error}</p>
-        <button className="btn btn-recompile" onClick={() => dispatch({ type: 'RESET' })} style={{ marginTop: 16 }}>返回</button>
-      </div>
-    );
+    return <div className="page player-page"><p style={{ color: '#8888aa' }}>加载失败</p></div>;
   }
 
   return (
     <div className="page player-page">
-      {/* 全局进度条 */}
       <ProgressBar
         segments={segments}
-        elapsedMs={totalElapsedMs}
+        elapsedMs={ds.totalElapsedMs}
         totalMs={totalMs}
-        currentPhaseLabel={phaseLabels[currentPhase] ?? currentPhase}
+        currentPhaseLabel={PHASE_LABELS[ds.phase] ?? ds.phase}
         onSeek={handleSeek}
       />
-
-      <div className="player-phase">{phaseLabels[currentPhase] ?? '准备中'}</div>
-
-      <div className="player-action-name">{actionName}</div>
-
-      {/* 当前动作倒计时 */}
-      <Timer remainingMs={actionRemainingMs} totalMs={actionRemainingMs > 0 ? actionRemainingMs : 60000} />
-
+      <div className="player-phase">{PHASE_LABELS[ds.phase] ?? ds.phase}</div>
+      <div className="player-action-name">{ds.actionName}</div>
+      <Timer remainingMs={ds.actionRemainingMs} totalMs={ds.actionRemainingMs || 60000} />
       <div className="player-controls">
         <button className="btn btn-pause" onClick={togglePause}>
-          {isPaused ? '▶ 继续' : '⏸ 暂停'}
+          {ds.isPaused ? '▶ 继续' : '⏸ 暂停'}
         </button>
-        <button className="btn btn-stop" onClick={handleStop}>
-          ■ 停止
-        </button>
+        <button className="btn btn-stop" onClick={handleStop}>■ 停止</button>
       </div>
     </div>
   );

@@ -128,9 +128,6 @@ export type AppStatus =
 export interface AppState {
   status: AppStatus;
   compiled: CompiledSequence | null;
-  currentActionName: string;
-  remainingMs: number;
-  currentPhase: Phase;
   totalDuration: number;       // 用户设定的秒数
 }
 
@@ -142,7 +139,6 @@ export type AppAction =
   | { type: 'START_PLAYING' }
   | { type: 'PAUSE' }
   | { type: 'RESUME' }
-  | { type: 'UPDATE_PROGRESS'; payload: { actionName: string; remainingMs: number; phase: Phase } }
   | { type: 'PLAYBACK_FINISHED' }
   | { type: 'RESET' };
 
