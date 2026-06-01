@@ -103,6 +103,7 @@ export class PlaybackScheduler {
   private scheduleLoop(): void {
     if (!this.running) return;
 
+    try {
     const now = this.audio.currentTime;
     const elapsedMs = (now - this.startTime) * 1000;
     const lookAheadMs = 200; // 提前200ms安排
@@ -178,6 +179,9 @@ export class PlaybackScheduler {
       if (item.type === 'action' || item.type === 'rest') {
         accumulatedMs += item.duration;
       }
+    }
+    } catch (e) {
+      console.error('[Scheduler] scheduleLoop error:', e);
     }
   }
 

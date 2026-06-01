@@ -26,7 +26,6 @@ const phaseLabels: Record<Phase, string> = {
 
 export const Player: React.FC = () => {
   const { state, dispatch } = useAppState();
-  const compiled = state.compiled;
   const rootRef = useRef<HTMLDivElement>(null);
   const schedulerRef = useRef<PlaybackScheduler | null>(null);
   const [actionName, setActionName] = useState('准备开始...');
@@ -34,13 +33,18 @@ export const Player: React.FC = () => {
   const [currentPhase, setCurrentPhase] = useState<Phase>('warmup');
   const [emergencyVisible, setEmergencyVisible] = useState(false);
   const [confirmStop, setConfirmStop] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const longPressRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // 安全保护：compiled 为空时回退首页
-  if (!compiled) {
-    dispatch({ type: 'RESET' });
-    return null;
-  }
+  // 安全保护：compiled 为空时回退首页（在 effect 中执行）
+  useEffect(() => {
+    if (!state.compiled) {
+      console.error('[Player] compiled is null, resetting');
+      dispatch({ type: 'RESET' });
+    }
+  }, [state.compiled, dispatch]);
+
+  const compiled = state.compiled;
 
   // 屏幕常亮 + 全屏
   useWakeLock(true);
@@ -56,38 +60,55 @@ export const Player: React.FC = () => {
 
   // 启动调度器
   useEffect(() => {
-    if (!compiled || !compiled.timeline.length) return;
+    if (!compiled || !compiled.timeline || compiled.timeline.length === 0) {
+      console.error('[Player] no compiled timeline, skipping scheduler');
+      return;
+    }
 
-    const scheduler = new PlaybackScheduler(
-      audioEngine,
-      (name, remaining, phase) => {
-        setActionName(name);
-        setRemainingMs(remaining);
-        setCurrentPhase(phase);
-        dispatch({ type: 'UPDATE_PROGRESS', payload: { actionName: name, remainingMs: remaining, phase } });
-      },
-      (phase) => {
-        setCurrentPhase(phase);
-      },
-      () => {
-        dispatch({ type: 'PLAYBACK_FINISHED' });
-        clearProgress();
-      },
-    );
+    console.log('[Player] starting scheduler, timeline length:', compiled.timeline.length);
 
-    schedulerRef.current = scheduler;
-    scheduler.start(compiled.timeline);
+    try {
+      const scheduler = new PlaybackScheduler(
+        audioEngine,
+        (name, remaining, phase) => {
+          console.log('[Player] onUI:', name, remaining, phase);
+          setActionName(name);
+          setRemainingMs(remaining);
+          setCurrentPhase(phase);
+          dispatch({ type: 'UPDATE_PROGRESS', payload: { actionName: name, remainingMs: remaining, phase } });
+        },
+        (phase) => {
+          console.log('[Player] onPhase:', phase);
+          setCurrentPhase(phase);
+        },
+        () => {
+          console.log('[Player] onFinish');
+          dispatch({ type: 'PLAYBACK_FINISHED' });
+          clearProgress();
+        },
+      );
+
+      schedulerRef.current = scheduler;
+      scheduler.start(compiled.timeline);
+      console.log('[Player] scheduler started successfully');
+    } catch (e: any) {
+      console.error('[Player] scheduler error:', e);
+      setError(e?.message ?? '调度器启动失败');
+    }
 
     return () => {
-      scheduler.stop();
+      schedulerRef.current?.stop();
+      schedulerRef.current = null;
     };
   }, [compiled, dispatch]);
 
   // 定期保存进度
   useEffect(() => {
+    if (!compiled) return;
+    const timeline = compiled.timeline;
     const interval = setInterval(() => {
       if (schedulerRef.current?.isRunning) {
-        saveProgress(compiled.timeline, schedulerRef.current.elapsed);
+        saveProgress(timeline, schedulerRef.current.elapsed);
       }
     }, 5000);
     return () => clearInterval(interval);
@@ -129,7 +150,27 @@ export const Player: React.FC = () => {
     clearProgress();
   }, [dispatch]);
 
-  const totalMs = compiled?.stats?.totalDuration ?? 0;
+  // 编译错误或无数据
+  if (!compiled) {
+    return (
+      <div className="page player-page">
+        <p style={{ color: '#8888aa', fontSize: 14 }}>加载编排数据失败，正在返回...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="page player-page">
+        <p style={{ color: '#e94560', fontSize: 14 }}>播放出错：{error}</p>
+        <button className="btn btn-recompile" onClick={() => dispatch({ type: 'RESET' })} style={{ marginTop: 16 }}>
+          返回首页
+        </button>
+      </div>
+    );
+  }
+
+  const totalMs = compiled.stats?.totalDuration || 0;
 
   return (
     <div className="page player-page" ref={rootRef}>
