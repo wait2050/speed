@@ -25,6 +25,7 @@ export class PlaybackScheduler {
   private running = false;
   private currentPhase: Phase = 'warmup';
   private currentActionName = '';
+  private lastVoiceKey = '';  // 用于检测动作是否切换，触发语音
 
   // 已安排的节拍时间点（去重用）
   private scheduledBeats = new Set<number>();
@@ -48,6 +49,7 @@ export class PlaybackScheduler {
     this.elapsedBeforePause = 0;
     this.scheduledUntil = 0;
     this.scheduledBeats.clear();
+    this.lastVoiceKey = '';
     this.startTime = this.audio.currentTime;
 
     this.scheduleLoop();
@@ -138,9 +140,23 @@ export class PlaybackScheduler {
             this.onPhase(item.phase);
           }
           this.onUI(item.name, remainingMs, item.phase);
+
+          // 动作切换时播放语音引导
+          const voiceKey = `action_${accumulatedMs}`;
+          if (voiceKey !== this.lastVoiceKey) {
+            this.lastVoiceKey = voiceKey;
+            this.audio.speakVoice(item.name);
+          }
         } else if (item.type === 'rest') {
           this.currentActionName = '休息中';
           this.onUI('休息中', remainingMs, item.phase);
+
+          // 休息开始也播放语音
+          const voiceKey = `rest_${accumulatedMs}`;
+          if (voiceKey !== this.lastVoiceKey) {
+            this.lastVoiceKey = voiceKey;
+            this.audio.speakVoice('休息中');
+          }
         }
       }
 

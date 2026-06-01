@@ -11,10 +11,32 @@ import {
   synthesizeBassdrum,
 } from './sounds';
 
+// 动作名 → 语音文件名映射
+const VOICE_MAP: Record<string, string> = {
+  '从上方和下方捏住并旋转': '从上方和下方捏住并旋转.wav',
+  '隔着内衣用指甲抓挠': '隔着内衣用指甲抓挠.wav',
+  '捏住并不断变换力度': '捏住并不断变换力度.wav',
+  '捏住并轻轻向外侧拉': '捏住并轻轻向外侧拉.wav',
+  '夹住周围区域': '夹住周围区域.wav',
+  '用指腹温柔摩擦': '用指腹温柔摩擦.wav',
+  '用指甲拨动': '用指甲拨动.wav',
+  '按压': '按压.wav',
+  '振动手指': '振动手指.wav',
+  '反复碰触': '反复碰触.wav',
+  '摩擦周围区域': '摩擦周围区域.wav',
+  '摩擦目标区域和周围区域': '摩擦目标区域和周围区域.wav',
+  '休息中': '休息.wav',
+  '收尾缓冲': '收尾缓冲.wav',
+};
+
+const BASE = import.meta.env.BASE_URL || '/';
+
 export class AudioEngine {
   ctx: AudioContext | null = null;
   private buffers = new Map<SoundType, AudioBuffer>();
   private signalBuffers = new Map<string, AudioBuffer>();
+  private voiceBuffers = new Map<string, AudioBuffer>();
+  private voicesLoaded = false;
   private initialized = false;
 
   constructor() {
@@ -41,6 +63,48 @@ export class AudioEngine {
     this.signalBuffers.set('heavy_beats', this.makeHeavyBeat());
 
     this.initialized = true;
+
+    // 后台预加载语音文件
+    this.loadVoices();
+  }
+
+  /** 异步加载所有 WAV 语音文件 */
+  private async loadVoices(): Promise<void> {
+    if (this.voicesLoaded || !this.ctx) return;
+
+    const names = Object.keys(VOICE_MAP);
+    const results = await Promise.allSettled(
+      names.map(async (name) => {
+        const filename = VOICE_MAP[name];
+        const url = `${BASE}voices/${encodeURIComponent(filename)}`;
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const arrayBuf = await resp.arrayBuffer();
+        const audioBuf = await this.ctx!.decodeAudioData(arrayBuf);
+        this.voiceBuffers.set(name, audioBuf);
+      })
+    );
+
+    const loaded = results.filter(r => r.status === 'fulfilled').length;
+    console.log(`[AudioEngine] 语音预加载: ${loaded}/${names.length} 个文件`);
+    this.voicesLoaded = true;
+  }
+
+  /** 播放动作语音（在指定时间点） */
+  speakVoice(actionName: string, when?: number): void {
+    if (!this.ctx || !this.initialized) return;
+    const buf = this.voiceBuffers.get(actionName);
+    if (!buf) return; // 语音还没加载完，静默跳过
+
+    const src = this.ctx.createBufferSource();
+    src.buffer = buf;
+    src.connect(this.ctx.destination);
+    src.start(when ?? this.ctx.currentTime + 0.01);
+  }
+
+  /** 检查语音是否已加载 */
+  get hasVoices(): boolean {
+    return this.voicesLoaded && this.voiceBuffers.size > 0;
   }
 
   get currentTime(): number {
