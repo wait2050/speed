@@ -355,15 +355,19 @@ function insertSnaps(timeline: TimelineItem[], snapCounts: Record<string, number
 
     // 均匀随机选点（带抖动）
     const totalActionMs = segments.reduce((s, seg) => s + (seg.endMs - seg.startMs), 0);
+    if (totalActionMs <= 0) continue;
     for (let n = 0; n < count; n++) {
       const t = (totalActionMs / (count + 1)) * (n + 1) + (Math.random() - 0.5) * (totalActionMs / (count + 1)) * 0.5;
-      // 找到 t 落在哪个 action item 后面
-      let found = false;
+      // 找到 t 落在哪个 action item 处
+      let bestIdx = actionItems[actionItems.length - 1]?.idx;
       for (const ai of actionItems) {
-        if (ai.relMs >= t && !found) {
-          insertions.push({ idx: ai.idx + 1, phase });
-          found = true;
+        if (ai.relMs >= t) {
+          bestIdx = ai.idx;
+          break;
         }
+      }
+      if (bestIdx !== undefined) {
+        insertions.push({ idx: bestIdx + 1, phase });
       }
     }
   }
