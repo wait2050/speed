@@ -7,6 +7,7 @@ import { compileSequence } from '../compiler/compiler';
 import { loadPreferences, savePreferences } from '../storage';
 import { audioEngine } from '../audio/engine';
 import { formatSec } from '../scheduler/clock';
+import { Footer } from '../components/Footer';
 import type { SoundType, SpeedTier } from '../types';
 
 const TIER_LABELS: Record<SpeedTier, string> = {
@@ -175,6 +176,8 @@ export const Home: React.FC = () => {
           </div>
         </div>
       )}
+
+      <Footer />
     </div>
   );
 };
