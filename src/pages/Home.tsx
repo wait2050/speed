@@ -35,10 +35,29 @@ export const Home: React.FC = () => {
     () => new Set<PhaseOption>(['warmup', 'core', 'sprint', 'climax', 'afterglow', 'cooldown'])
   );
 
+  const ALL_ACTION_NAMES = [
+    '从上方和下方捏住并旋转', '隔着内衣用指甲抓挠',
+    '捏住并不断变换力度', '捏住并轻轻向外侧拉', '夹住周围区域',
+    '用指腹温柔摩擦', '用指甲拨动', '按压',
+    '振动手指', '反复碰触', '摩擦周围区域', '摩擦目标区域和周围区域',
+  ];
+
+  const [enabledActions, setEnabledActions] = useState<Set<string>>(
+    () => new Set(ALL_ACTION_NAMES)
+  );
+
   const togglePhase = useCallback((p: PhaseOption) => {
     setEnabledPhases(prev => {
       const next = new Set(prev);
       if (next.has(p)) next.delete(p); else next.add(p);
+      return next;
+    });
+  }, []);
+
+  const toggleAction = useCallback((name: string) => {
+    setEnabledActions(prev => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name); else next.add(name);
       return next;
     });
   }, []);
@@ -60,10 +79,10 @@ export const Home: React.FC = () => {
     // 编译器是纯函数，但用 setTimeout 避免阻塞 UI
     setTimeout(() => {
       const totalMs = prefs.defaultDuration * 1000;
-      const compiled = compileSequence(totalMs, prefs, undefined, { enabled: enabledPhases });
+      const compiled = compileSequence(totalMs, prefs, undefined, { enabled: enabledPhases }, enabledActions);
       dispatch({ type: 'COMPILATION_DONE', payload: compiled });
     }, 50);
-  }, [dispatch, prefs, audioReady, enabledPhases]);
+  }, [dispatch, prefs, audioReady, enabledPhases, enabledActions]);
 
   const handleDurationChange = useCallback((val: number) => {
     const newPrefs = { ...prefs, defaultDuration: val };
@@ -150,6 +169,22 @@ export const Home: React.FC = () => {
               onClick={() => togglePhase(key)}
             >
               {label}
+            </button>
+          ))}
+        </div>
+      </section>
+
+      {/* 动作选择 */}
+      <section className="phase-toggles">
+        <span className="phase-toggles-label">可选动作 ({enabledActions.size}/{ALL_ACTION_NAMES.length})</span>
+        <div className="phase-toggles-row">
+          {ALL_ACTION_NAMES.map(name => (
+            <button
+              key={name}
+              className={`phase-toggle action-toggle ${enabledActions.has(name) ? 'active' : ''}`}
+              onClick={() => toggleAction(name)}
+            >
+              {name}
             </button>
           ))}
         </div>

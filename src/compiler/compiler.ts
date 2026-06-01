@@ -19,7 +19,7 @@ import {
   COOLDOWN_INTERVAL,
 } from './rules';
 import {
-  weightedPick, pickTop, pickBasic, ALL_ACTIONS,
+  weightedPick, pickTop, pickBasic, ALL_ACTIONS, ACTION_POOLS,
 } from './pools';
 
 // --- 主编译函数 ---
@@ -28,10 +28,29 @@ export function compileSequence(
   prefs: UserPreferences,
   lockedActions?: Map<number, string>,
   phaseConfig?: import('../types').PhaseConfig,
+  enabledActions?: Set<string>,
 ): CompiledSequence {
   const timeline: TimelineItem[] = [];
   const enabled = phaseConfig?.enabled ?? new Set(['warmup','core','sprint','climax','afterglow','cooldown'] as const);
   const has = (p: string) => enabled.has(p as any);
+
+  // 过滤动作池
+  const filterPool = <T extends { name: string }>(pool: T[]): T[] =>
+    enabledActions ? pool.filter(a => enabledActions.has(a.name)) : pool;
+  const pickBasicFiltered = () => {
+    const pool = filterPool([...ACTION_POOLS.basic]);
+    return pool[Math.floor(Math.random() * pool.length)] || ACTION_POOLS.basic[0];
+  };
+  const pickTopFiltered = () => {
+    const pool = filterPool([...ACTION_POOLS.top]);
+    return pool[Math.floor(Math.random() * pool.length)] || ACTION_POOLS.top[0];
+  };
+  const weightedPickFiltered = () => {
+    const all = filterPool([...ALL_ACTIONS]);
+    if (all.length === 0) return ALL_ACTIONS[0];
+    // 重用原 weightedPick 逻辑
+    return weightedPick(all);
+  };
 
   // 1. 终局序列固定时长（根据开关计算）
   let FINALE_DURATION = 0;
@@ -99,7 +118,7 @@ export function compileSequence(
   if (has('warmup') && warmupBudget > 0) {
     let filled = 0;
     while (filled < warmupBudget) {
-      const action = pickForStage(pickBasic);
+      const action = pickForStage(pickBasicFiltered);
       const bpm = prefs.customBpm.slow;
       const dur = randInRange(WARMUP_ACTION_MIN, WARMUP_ACTION_MAX);
       timeline.push(makeAction(action.name, dur, bpm, prefs.customSounds.slow, WARMUP_VOLUME, 'warmup'));
@@ -123,7 +142,7 @@ export function compileSequence(
     let filled = 0;
     while (filled < coreBudget) {
       // 从全部动作池加权抽取（优先锁定动作）
-      const action = pickForStage(() => weightedPick(ALL_ACTIONS), weightedPick(ALL_ACTIONS));
+      const action = pickForStage(weightedPickFiltered, weightedPickFiltered());
 
       const dur = randInRange(CORE_ACTION_MIN, CORE_ACTION_MAX);
       // 核心阶段音色：慢速用woodblock，快速用heartbeat
@@ -158,7 +177,7 @@ export function compileSequence(
     {
       let filled = 0;
       while (filled < third) {
-        const action = pickForStage(() => pickTop(), pickTop());
+        const action = pickForStage(pickTopFiltered, pickTopFiltered());
         const dur = Math.min(randInRange(SPRINT_ACTION_MAX - 10000, SPRINT_ACTION_MAX), SPRINT_ACTION_MAX);
         timeline.push(makeAction(action.name, dur, SPRINT_START_BPM, prefs.customSounds.medium, SPRINT_VOLUME, 'sprint_start'));
         filled += dur;
@@ -174,7 +193,7 @@ export function compileSequence(
     {
       let filled = 0;
       while (filled < third) {
-        const action = pickForStage(() => pickTop(), pickTop());
+        const action = pickForStage(pickTopFiltered, pickTopFiltered());
         const dur = Math.min(randInRange(SPRINT_ACTION_MAX - 10000, SPRINT_ACTION_MAX), SPRINT_ACTION_MAX);
         timeline.push(makeAction(action.name, dur, SPRINT_ACCEL_BPM, prefs.customSounds.fast, SPRINT_VOLUME, 'sprint_accel'));
         filled += dur;
@@ -190,7 +209,7 @@ export function compileSequence(
     {
       let filled = 0;
       while (filled < third) {
-        const action = pickForStage(() => pickTop(), pickTop());
+        const action = pickForStage(pickTopFiltered, pickTopFiltered());
         const segDur = Math.min(SPRINT_ACTION_MAX, third - filled);
         const dur = Math.min(randInRange(30000, segDur), SPRINT_ACTION_MAX);
         timeline.push(makeAction(action.name, dur, SPRINT_PEAK_BPM, prefs.customSounds.extreme, SPRINT_VOLUME, 'sprint_peak'));
@@ -220,13 +239,13 @@ export function compileSequence(
   // ---- 终局序列 ----
   // 高潮冲刺
   if (has('climax')) {
-    const climaxAction = pickTop();
+    const climaxAction = pickTopFiltered();
     timeline.push(makeAction(climaxAction.name, CLIMAX_DURATION, prefs.customBpm.extreme, prefs.customSounds.extreme, CLIMAX_VOLUME, 'climax'));
   }
 
   // 高潮后持续
   if (has('afterglow')) {
-    const afterglowAction = pickTop();
+    const afterglowAction = pickTopFiltered();
     timeline.push(makeAction(afterglowAction.name, AFTERGLOW_DURATION, prefs.customBpm.fast, prefs.customSounds.fast, AFTERGLOW_VOLUME, 'afterglow'));
   }
 
