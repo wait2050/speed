@@ -14,24 +14,28 @@ import './index.css';
 const AppInner: React.FC = () => {
   const { state, dispatch } = useAppState();
 
-  // 检测未完成编排
+  // 检测未完成编排（延迟执行，避免阻塞首屏渲染）
   React.useEffect(() => {
-    const saved = loadProgress();
-    if (saved && state.status === 'IDLE') {
-      const resume = window.confirm(
-        '检测到上次未完成的播放，是否继续？'
-      );
-      if (resume) {
-        // 恢复播放
-        audioEngine.init().then(() => {
-          dispatch({
-            type: 'COMPILATION_DONE',
-            payload: { timeline: saved.timeline, stats: { totalDuration: 0, totalActionDuration: 0, totalRestDuration: 0, rounds: 0, warmupRounds: 0, coreRounds: 0, sprintRounds: 0 } },
-          });
-          dispatch({ type: 'START_PLAYING' });
-        });
-      }
-    }
+    const timer = setTimeout(() => {
+      try {
+        const saved = loadProgress();
+        if (saved && state.status === 'IDLE') {
+          const resume = window.confirm(
+            '检测到上次未完成的播放，是否继续？'
+          );
+          if (resume) {
+            audioEngine.init().then(() => {
+              dispatch({
+                type: 'COMPILATION_DONE',
+                payload: { timeline: saved.timeline, stats: { totalDuration: 0, totalActionDuration: 0, totalRestDuration: 0, rounds: 0, warmupRounds: 0, coreRounds: 0, sprintRounds: 0 } },
+              });
+              dispatch({ type: 'START_PLAYING' });
+            }).catch(() => {});
+          }
+        }
+      } catch { /* ignore */ }
+    }, 500);
+    return () => clearTimeout(timer);
   }, []); // eslint-disable-line
 
   switch (state.status) {

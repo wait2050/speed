@@ -87,14 +87,12 @@ export class AudioEngine {
   /** 立即试听一个节拍 */
   previewBeat(sound: SoundType, volume = 0.5): void {
     if (!this.ctx || !this.initialized) return;
-    this.resume();
-    this.scheduleBeat(sound, this.ctx.currentTime + 0.01, volume);
-
-    // Also handle fingertap bandpass filtering at play time
+    this.resume().catch(() => {});
     if (sound === 'fingertap') {
       this.scheduleBeatWithFilter(sound, this.ctx.currentTime + 0.01, volume);
       return;
     }
+    this.scheduleBeat(sound, this.ctx.currentTime + 0.01, volume);
   }
 
   private scheduleBeatWithFilter(sound: SoundType, when: number, volume: number): void {
