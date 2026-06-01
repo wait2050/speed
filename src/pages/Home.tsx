@@ -6,7 +6,7 @@ import { useAppState } from '../state/context';
 import { compileSequence } from '../compiler/compiler';
 import { loadPreferences, savePreferences } from '../storage';
 import { audioEngine } from '../audio/engine';
-import { formatSec } from '../scheduler/clock';
+import { formatSec } from '../utils/time';
 import { Footer } from '../components/Footer';
 import type { SoundType, SpeedTier, PhaseOption } from '../types';
 

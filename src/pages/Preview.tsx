@@ -5,7 +5,7 @@ import React, { useMemo, useCallback, useState } from 'react';
 import { useAppState } from '../state/context';
 import { compileSequence } from '../compiler/compiler';
 import { loadPreferences } from '../storage';
-import { formatMs } from '../scheduler/clock';
+import { formatMs } from '../utils/time';
 import type { TimelineItem } from '../types';
 
 /** 从 timeline 中提取动作+休息+响指项及其序号 */

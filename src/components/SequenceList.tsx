@@ -3,7 +3,7 @@
 // ============================================================
 import React from 'react';
 import type { TimelineItem } from '../types';
-import { formatMs } from '../scheduler/clock';
+import { formatMs } from '../utils/time';
 
 interface Props {
   timeline: TimelineItem[];

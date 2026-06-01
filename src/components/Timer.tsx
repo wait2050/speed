@@ -2,7 +2,7 @@
 // Timer — 圆形倒计时
 // ============================================================
 import React from 'react';
-import { formatMs } from '../scheduler/clock';
+import { formatMs } from '../utils/time';
 
 interface Props {
   remainingMs: number;

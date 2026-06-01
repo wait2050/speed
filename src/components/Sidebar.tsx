@@ -3,7 +3,7 @@
 // ============================================================
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { loadHistory, loadFavorites, removeFavorite } from '../storage';
-import { formatSec } from '../scheduler/clock';
+import { formatSec } from '../utils/time';
 import { readImportFile } from '../storage/export';
 import type { HistoryEntry, Favorite, CompiledSequence } from '../types';
 
