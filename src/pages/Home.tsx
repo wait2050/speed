@@ -1,0 +1,180 @@
+// ============================================================
+// Home — 主页：总时长设定 + 生成编排
+// ============================================================
+import React, { useState, useCallback } from 'react';
+import { useAppState } from '../state/context';
+import { compileSequence } from '../compiler/compiler';
+import { loadPreferences, savePreferences } from '../storage';
+import { audioEngine } from '../audio/engine';
+import { formatSec } from '../scheduler/clock';
+import type { SoundType, SpeedTier } from '../types';
+
+const TIER_LABELS: Record<SpeedTier, string> = {
+  slow: '慢速',
+  medium: '中速',
+  fast: '快速',
+  extreme: '极速',
+};
+
+const SOUNDS: { id: SoundType; label: string }[] = [
+  { id: 'tick', label: '经典嗒音' },
+  { id: 'woodblock', label: '木鱼' },
+  { id: 'heartbeat', label: '心跳' },
+  { id: 'waterdrop', label: '水滴' },
+  { id: 'fingertap', label: '指尖敲击' },
+  { id: 'bassdrum', label: '低音鼓点' },
+];
+
+export const Home: React.FC = () => {
+  const { state, dispatch } = useAppState();
+  const [prefs, setPrefs] = useState(() => loadPreferences());
+  const [showSettings, setShowSettings] = useState(false);
+  const [audioReady, setAudioReady] = useState(false);
+
+  const handleInitAudio = useCallback(async () => {
+    await audioEngine.init();
+    setAudioReady(true);
+  }, []);
+
+  const handleCompile = useCallback(async () => {
+    // 确保音频引擎初始化
+    if (!audioReady) {
+      await audioEngine.init();
+      setAudioReady(true);
+    }
+
+    dispatch({ type: 'START_COMPILING' });
+
+    // 编译器是纯函数，但用 setTimeout 避免阻塞 UI
+    setTimeout(() => {
+      const totalMs = prefs.defaultDuration * 1000;
+      const compiled = compileSequence(totalMs, prefs);
+      dispatch({ type: 'COMPILATION_DONE', payload: compiled });
+    }, 50);
+  }, [dispatch, prefs, audioReady]);
+
+  const handleDurationChange = useCallback((val: number) => {
+    const newPrefs = { ...prefs, defaultDuration: val };
+    setPrefs(newPrefs);
+    savePreferences(newPrefs);
+  }, [prefs]);
+
+  const handleBpmChange = useCallback((tier: SpeedTier, val: number) => {
+    const newPrefs = {
+      ...prefs,
+      customBpm: { ...prefs.customBpm, [tier]: val },
+    };
+    setPrefs(newPrefs);
+    savePreferences(newPrefs);
+  }, [prefs]);
+
+  const handleSoundChange = useCallback((tier: SpeedTier | 'cooldown', sound: SoundType) => {
+    const newPrefs = {
+      ...prefs,
+      customSounds: { ...prefs.customSounds, [tier]: sound },
+    };
+    setPrefs(newPrefs);
+    savePreferences(newPrefs);
+    // 试听
+    if (audioReady) {
+      audioEngine.previewBeat(sound);
+    }
+  }, [prefs, audioReady]);
+
+  const presets = [10, 15, 20, 25, 30, 40, 50, 60];
+
+  return (
+    <div className="page home-page">
+      <h1 className="app-title">节奏按摩引导器</h1>
+
+      {!audioReady && (
+        <button className="btn btn-init" onClick={handleInitAudio}>
+          点此初始化音频引擎
+        </button>
+      )}
+
+      {/* 时长设定 */}
+      <section className="duration-section">
+        <div className="duration-display">
+          <span className="duration-value">{Math.floor(prefs.defaultDuration / 60)}</span>
+          <span className="duration-unit">分钟</span>
+        </div>
+        <input
+          type="range"
+          className="duration-slider"
+          min={1}
+          max={60}
+          value={Math.floor(prefs.defaultDuration / 60)}
+          onChange={e => handleDurationChange(parseInt(e.target.value) * 60)}
+        />
+        <div className="preset-row">
+          {presets.map(p => (
+            <button
+              key={p}
+              className={`preset-btn ${Math.floor(prefs.defaultDuration / 60) === p ? 'active' : ''}`}
+              onClick={() => handleDurationChange(p * 60)}
+            >
+              {p}′
+            </button>
+          ))}
+        </div>
+      </section>
+
+      {/* 生成按钮 */}
+      <button className="btn btn-compile" onClick={handleCompile} disabled={!audioReady}>
+        生成编排
+      </button>
+
+      {/* 设置 */}
+      <button
+        className="btn btn-settings-toggle"
+        onClick={() => setShowSettings(!showSettings)}
+      >
+        {showSettings ? '收起设置 ▲' : '自定义速度/音色 ▼'}
+      </button>
+
+      {showSettings && (
+        <div className="settings-panel">
+          {(Object.keys(prefs.customBpm) as SpeedTier[]).map(tier => (
+            <div key={tier} className="settings-row">
+              <span className="settings-label">{TIER_LABELS[tier]}</span>
+              <input
+                type="range"
+                min={40}
+                max={200}
+                value={prefs.customBpm[tier]}
+                onChange={e => handleBpmChange(tier, parseInt(e.target.value))}
+              />
+              <span className="settings-value">{prefs.customBpm[tier]} BPM</span>
+              <div className="sound-picker">
+                {SOUNDS.map(s => (
+                  <button
+                    key={s.id}
+                    className={`sound-btn ${prefs.customSounds[tier] === s.id ? 'active' : ''}`}
+                    onClick={() => handleSoundChange(tier, s.id)}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+          <div className="settings-row">
+            <span className="settings-label">收尾</span>
+            <div className="sound-picker">
+              {SOUNDS.map(s => (
+                <button
+                  key={s.id}
+                  className={`sound-btn ${prefs.customSounds.cooldown === s.id ? 'active' : ''}`}
+                  onClick={() => handleSoundChange('cooldown', s.id)}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
