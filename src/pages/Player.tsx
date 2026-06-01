@@ -112,18 +112,18 @@ export const Player: React.FC = () => {
     return () => document.removeEventListener('visibilitychange', onVis);
   }, []);
 
-  // 暂停 / 继续
+  // 暂停 / 继续（直接从调度器读状态，避免闭包陈旧）
   const togglePause = useCallback(() => {
     const s = schedulerRef.current;
     if (!s) return;
-    if (isPaused) {
-      s.resume();
-      setIsPaused(false);
-    } else {
+    if (s.isRunning) {
       s.pause();
       setIsPaused(true);
+    } else {
+      s.resume();
+      setIsPaused(false);
     }
-  }, [isPaused]);
+  }, []);
 
   // 点击进度条跳转
   const handleSeek = useCallback((targetMs: number) => {
