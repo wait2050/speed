@@ -210,20 +210,27 @@ export function compileSequence(
       }
     }
 
-    // 顶峰段（每60秒8秒微休息）
+    // 顶峰段（每60秒动作时间插入8秒微休息）
     {
       let filled = 0;
+      let actionAccum = 0; // 累计动作时间，用于判断何时插入微休息
       while (filled < third) {
         const action = pickForStage(pickTopFiltered, pickTopFiltered());
-        const segDur = Math.min(SPRINT_ACTION_MAX, third - filled);
-        const dur = Math.min(randInRange(30000, segDur), SPRINT_ACTION_MAX);
+        const remaining = third - filled;
+        // 动作不超过60秒，且不超过剩余空间
+        const maxDur = Math.min(SPRINT_ACTION_MAX, remaining - MICRO_REST);
+        const dur = maxDur > 20000
+          ? Math.min(randInRange(30000, maxDur), maxDur)
+          : maxDur;
+        if (dur < 10000) break;
         timeline.push(makeAction(action.name, dur, SPRINT_PEAK_BPM, prefs.customSounds.extreme, SPRINT_VOLUME, 'sprint_peak'));
         filled += dur;
+        actionAccum += dur;
 
-        // 每60秒插入微休息
-        if (filled % 60000 < (dur % 60000) || filled >= 60000) {
-          const remainingInBlock = third - filled;
-          if (remainingInBlock > MICRO_REST + 5000) {
+        // 累计动作时间超过60秒时插入8秒微休息
+        if (actionAccum >= 60000) {
+          actionAccum = 0;
+          if (third - filled > MICRO_REST + 5000) {
             timeline.push({ type: 'rest', duration: MICRO_REST, phase: 'sprint_peak' });
             filled += MICRO_REST;
           }
