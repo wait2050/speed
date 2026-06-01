@@ -89,6 +89,30 @@ export class PlaybackScheduler {
     this.scheduledBeats.clear();
   }
 
+  /** 跳转到指定毫秒位置 */
+  seek(targetMs: number): void {
+    const wasRunning = this.running;
+    if (this.timerId) {
+      clearInterval(this.timerId);
+      this.timerId = null;
+    }
+    this.scheduledBeats.clear();
+    this.scheduledUntil = 0;
+    this.voiceEndTime = 0;
+    this.lastVoiceKey = '';
+
+    // 调整 startTime 使 elapsed = targetMs
+    this.startTime = this.audio.currentTime - targetMs / 1000;
+    this.elapsedBeforePause = 0;
+    this.pausedAt = null;
+
+    if (wasRunning) {
+      this.running = true;
+      this.scheduleLoop();
+      this.timerId = setInterval(() => this.scheduleLoop(), 50);
+    }
+  }
+
   get elapsed(): number {
     if (this.pausedAt !== null) return this.elapsedBeforePause;
     if (!this.running && this.elapsedBeforePause > 0) return this.elapsedBeforePause;

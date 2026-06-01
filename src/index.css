@@ -482,6 +482,32 @@ h2 {
 
 /* ---- Emergency Button ---- */
 
+.player-controls {
+  display: flex;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.btn-pause {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  padding: 12px 28px;
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.btn-stop {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid rgba(255,255,255,0.1);
+  padding: 12px 20px;
+  border-radius: 24px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
 .emergency-btn {
   position: fixed;
   bottom: calc(20px + var(--safe-bottom));
@@ -633,6 +659,60 @@ h2 {
 .fav-buttons {
   display: flex;
   gap: 12px;
+}
+
+/* ---- Progress Bar ---- */
+
+.progress-bar-container {
+  width: 100%;
+  max-width: 360px;
+  margin-top: 8px;
+}
+
+.progress-bar-track {
+  position: relative;
+  height: 6px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 3px;
+  cursor: pointer;
+  overflow: visible;
+}
+
+.progress-segment {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  border-radius: 3px;
+  opacity: 0.6;
+  transition: opacity 0.2s;
+}
+
+.progress-bar-track:hover .progress-segment {
+  opacity: 0.85;
+}
+
+.progress-playhead {
+  position: absolute;
+  top: -4px;
+  width: 12px;
+  height: 14px;
+  background: #fff;
+  border-radius: 3px;
+  transform: translateX(-50%);
+  box-shadow: 0 0 6px rgba(255,255,255,0.4);
+  transition: left 0.15s linear;
+}
+
+.progress-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+  font-size: 10px;
+  color: rgba(255,255,255,0.2);
+}
+
+.progress-phase-label {
+  color: rgba(255,255,255,0.3);
 }
 
 /* ---- Footer ---- */

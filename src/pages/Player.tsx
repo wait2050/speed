@@ -1,10 +1,13 @@
 // ============================================================
-// Player — 播放页：大字号动作名 + 倒计时 + 零交互
+// Player — 播放页：进度条 + 暂停/继续 + 倒计时
 // ============================================================
-import React, { useEffect, useRef, useCallback, useState } from 'react';
+import React, { useEffect, useRef, useCallback, useState, useMemo } from 'react';
 import { useAppState } from '../state/context';
 import { Timer } from '../components/Timer';
+import { ProgressBar } from '../components/ProgressBar';
 import { PlaybackScheduler } from '../scheduler/scheduler';
+import { computePhaseSegments } from '../scheduler/segments';
+import type { PhaseSegment } from '../scheduler/segments';
 import { audioEngine } from '../audio/engine';
 import { useWakeLock } from '../hooks/useWakeLock';
 import { lockTouch } from '../utils/preventTouch';
@@ -14,13 +17,13 @@ import type { Phase } from '../types';
 const phaseLabels: Record<Phase, string> = {
   warmup: '热身',
   core: '核心',
-  sprint_start: '冲刺·起冲',
-  sprint_accel: '冲刺·加速',
-  sprint_peak: '冲刺·顶峰',
-  climax: '高潮冲刺',
-  afterglow: '高潮后持续',
+  sprint_start: '起冲',
+  sprint_accel: '加速',
+  sprint_peak: '顶峰',
+  climax: '冲刺',
+  afterglow: '余韵',
   cooldown: '收尾',
-  landing: '静默着陆',
+  landing: '着陆',
 };
 
 export const Player: React.FC = () => {
@@ -30,12 +33,13 @@ export const Player: React.FC = () => {
   const [actionName, setActionName] = useState('准备开始...');
   const [remainingMs, setRemainingMs] = useState(0);
   const [currentPhase, setCurrentPhase] = useState<Phase>('warmup');
-  const [emergencyVisible, setEmergencyVisible] = useState(false);
-  const [confirmStop, setConfirmStop] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const longPressRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pausedRef = useRef(false);
 
-  // 安全保护：compiled 为空时回退首页（在 effect 中执行）
+  const compiled = state.compiled;
+
+  // 安全保护
   useEffect(() => {
     if (!state.compiled) {
       console.error('[Player] compiled is null, resetting');
@@ -43,9 +47,7 @@ export const Player: React.FC = () => {
     }
   }, [state.compiled, dispatch]);
 
-  const compiled = state.compiled;
-
-  // 屏幕常亮（全屏已移除）
+  // 屏幕常亮
   useWakeLock(true);
 
   // 防误触
@@ -59,31 +61,27 @@ export const Player: React.FC = () => {
   // 启动调度器
   useEffect(() => {
     if (!compiled || !compiled.timeline || compiled.timeline.length === 0) {
-      console.error('[Player] no compiled timeline, skipping scheduler');
+      console.error('[Player] no compiled timeline');
       return;
     }
 
     console.log('[Player] starting scheduler, timeline length:', compiled.timeline.length);
 
-    // 移动端 AudioContext 可能被挂起，先恢复
     audioEngine.resume().catch(() => {});
 
     try {
       const scheduler = new PlaybackScheduler(
         audioEngine,
         (name, remaining, phase) => {
-          console.log('[Player] onUI:', name, remaining, phase);
           setActionName(name);
           setRemainingMs(remaining);
           setCurrentPhase(phase);
           dispatch({ type: 'UPDATE_PROGRESS', payload: { actionName: name, remainingMs: remaining, phase } });
         },
         (phase) => {
-          console.log('[Player] onPhase:', phase);
           setCurrentPhase(phase);
         },
         () => {
-          console.log('[Player] onFinish');
           dispatch({ type: 'PLAYBACK_FINISHED' });
           clearProgress();
         },
@@ -91,7 +89,8 @@ export const Player: React.FC = () => {
 
       schedulerRef.current = scheduler;
       scheduler.start(compiled.timeline);
-      console.log('[Player] scheduler started successfully');
+      setIsPaused(false);
+      pausedRef.current = false;
     } catch (e: any) {
       console.error('[Player] scheduler error:', e);
       setError(e?.message ?? '调度器启动失败');
@@ -115,43 +114,61 @@ export const Player: React.FC = () => {
     return () => clearInterval(interval);
   }, [compiled]);
 
-  // 页面切后台处理
+  // 页面切后台
   useEffect(() => {
     const onVisibility = () => {
       if (document.hidden) {
         schedulerRef.current?.pause();
+        setIsPaused(true);
+        pausedRef.current = true;
       } else {
         schedulerRef.current?.resume();
+        setIsPaused(false);
+        pausedRef.current = false;
       }
     };
     document.addEventListener('visibilitychange', onVisibility);
     return () => document.removeEventListener('visibilitychange', onVisibility);
   }, []);
 
-  // 紧急退出：长按3秒
-  const handleEmergStart = useCallback(() => {
-    longPressRef.current = setTimeout(() => {
-      setEmergencyVisible(true);
-      setConfirmStop(true);
-    }, 3000);
-  }, []);
-
-  const handleEmergCancel = useCallback(() => {
-    if (longPressRef.current) {
-      clearTimeout(longPressRef.current);
-      longPressRef.current = null;
+  // 暂停/继续
+  const togglePause = useCallback(() => {
+    const s = schedulerRef.current;
+    if (!s) return;
+    if (pausedRef.current) {
+      s.resume();
+      setIsPaused(false);
+      pausedRef.current = false;
+    } else {
+      s.pause();
+      setIsPaused(true);
+      pausedRef.current = true;
     }
-    setEmergencyVisible(false);
-    setConfirmStop(false);
   }, []);
 
+  // 点击进度条跳转
+  const handleSeek = useCallback((targetMs: number) => {
+    schedulerRef.current?.seek(targetMs);
+    setIsPaused(false);
+    pausedRef.current = false;
+  }, []);
+
+  // 停止
   const handleStop = useCallback(() => {
     schedulerRef.current?.stop();
     dispatch({ type: 'RESET' });
     clearProgress();
   }, [dispatch]);
 
-  // 编译错误或无数据
+  // 阶段分段（进度条用）
+  const segments: PhaseSegment[] = useMemo(
+    () => (compiled ? computePhaseSegments(compiled.timeline) : []),
+    [compiled]
+  );
+
+  const totalMs = compiled?.stats?.totalDuration || 0;
+  const elapsedMs = totalMs - remainingMs;
+
   if (!compiled) {
     return (
       <div className="page player-page">
@@ -171,38 +188,38 @@ export const Player: React.FC = () => {
     );
   }
 
-  const totalMs = compiled.stats?.totalDuration || 0;
-
   return (
     <div className="page player-page" ref={rootRef}>
+      {/* 进度条 */}
+      <ProgressBar
+        segments={segments}
+        elapsedMs={elapsedMs}
+        totalMs={totalMs}
+        currentPhaseLabel={phaseLabels[currentPhase] ?? currentPhase}
+        onSeek={handleSeek}
+      />
+
+      {/* 阶段标签 */}
       <div className="player-phase">
         {phaseLabels[currentPhase] ?? '准备中'}
       </div>
 
+      {/* 动作名称 */}
       <div className="player-action-name">
         {actionName}
       </div>
 
+      {/* 倒计时 */}
       <Timer remainingMs={remainingMs} totalMs={totalMs > 0 ? totalMs : 60000} />
 
-      {/* 紧急退出按钮（角落透明） */}
-      <div
-        className={`emergency-btn ${emergencyVisible ? 'visible' : ''}`}
-        onTouchStart={handleEmergStart}
-        onTouchEnd={handleEmergCancel}
-        onMouseDown={handleEmergStart}
-        onMouseUp={handleEmergCancel}
-        onMouseLeave={handleEmergCancel}
-      >
-        {confirmStop ? (
-          <div className="emergency-confirm">
-            <p>确定停止当前体验？</p>
-            <button className="btn btn-danger" onClick={handleStop}>确定停止</button>
-            <button className="btn btn-cancel" onClick={handleEmergCancel}>取消</button>
-          </div>
-        ) : (
-          <span className="emergency-hint">长按3秒停止</span>
-        )}
+      {/* 控制按钮 */}
+      <div className="player-controls">
+        <button className="btn btn-pause" onClick={togglePause}>
+          {isPaused ? '▶ 继续' : '⏸ 暂停'}
+        </button>
+        <button className="btn btn-stop" onClick={handleStop}>
+          ■ 停止
+        </button>
       </div>
     </div>
   );
