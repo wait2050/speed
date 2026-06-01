@@ -213,6 +213,46 @@ h2 {
   transition: all 0.12s;
 }
 
+/* ---- Phase Toggles ---- */
+
+.phase-toggles {
+  width: 100%;
+  margin-bottom: 16px;
+}
+
+.phase-toggles-label {
+  font-size: 11px;
+  color: rgba(255,255,255,0.2);
+  letter-spacing: 1px;
+  display: block;
+  margin-bottom: 6px;
+  text-align: center;
+}
+
+.phase-toggles-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+}
+
+.phase-toggle {
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+
+.phase-toggle.active {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
 .preset-btn.active {
   border-color: var(--accent);
   background: var(--accent-dim);

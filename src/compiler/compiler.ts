@@ -26,33 +26,47 @@ import {
 export function compileSequence(
   totalDurationMs: number,
   prefs: UserPreferences,
-  lockedActions?: Map<number, string>
+  lockedActions?: Map<number, string>,
+  phaseConfig?: import('../types').PhaseConfig,
 ): CompiledSequence {
   const timeline: TimelineItem[] = [];
+  const enabled = phaseConfig?.enabled ?? new Set(['warmup','core','sprint','climax','afterglow','cooldown'] as const);
+  const has = (p: string) => enabled.has(p as any);
 
-  // 1. 终局序列固定时长
-  const FINALE_DURATION = CLIMAX_DURATION + AFTERGLOW_DURATION + COOLDOWN_DURATION;
+  // 1. 终局序列固定时长（根据开关计算）
+  let FINALE_DURATION = 0;
+  if (has('climax')) FINALE_DURATION += CLIMAX_DURATION;
+  if (has('afterglow')) FINALE_DURATION += AFTERGLOW_DURATION;
+  if (has('cooldown')) FINALE_DURATION += COOLDOWN_DURATION;
 
   // 2. 短周期模式：<10分钟，仅热身+核心+终局，不单独分配冲刺
   const isShortMode = totalDurationMs < MIN_RECOMMENDED_DURATION;
 
-  // 3. 剩余时长
+  // 3. 剩余时长（分配给非终局阶段）
   const remaining = totalDurationMs - FINALE_DURATION;
   if (remaining <= 0) {
     throw new Error(`总时长过短（至少需要 ${Math.ceil(FINALE_DURATION / 60000)} 分钟）`);
   }
 
-  // 4. 比例分配
-  let warmupBudget: number, coreBudget: number, sprintBudget: number;
-  if (isShortMode) {
-    // 短周期：热身30%，核心70%，不独立分冲刺
-    warmupBudget = remaining * 0.30;
-    coreBudget = remaining * 0.70;
-    sprintBudget = 0;
+  // 4. 比例分配（跳过禁用阶段）
+  let warmupBudget = 0, coreBudget = 0, sprintBudget = 0;
+  const enabledMain = [has('warmup'), has('core'), has('sprint')];
+  const enabledCount = enabledMain.filter(Boolean).length;
+
+  if (enabledCount === 0) {
+    // 没有前置阶段，直接跳到终局（下方会处理）
+  } else if (isShortMode) {
+    if (has('warmup')) warmupBudget = remaining * (has('core') ? 0.30 : 1);
+    if (has('core')) coreBudget = remaining * (has('warmup') ? 0.70 : 1);
   } else {
-    warmupBudget = remaining * WARMUP_RATIO;
-    coreBudget = remaining * CORE_RATIO;
-    sprintBudget = remaining * SPRINT_RATIO;
+    const ratios = [WARMUP_RATIO, CORE_RATIO, SPRINT_RATIO];
+    const enabledRatios = [has('warmup') ? ratios[0] : 0, has('core') ? ratios[1] : 0, has('sprint') ? ratios[2] : 0];
+    const totalRatio = enabledRatios.reduce((a, b) => a + b, 0);
+    if (totalRatio > 0) {
+      warmupBudget = remaining * (enabledRatios[0] / totalRatio);
+      coreBudget = remaining * (enabledRatios[1] / totalRatio);
+      sprintBudget = remaining * (enabledRatios[2] / totalRatio);
+    }
   }
 
   const phaseMap = new Map<Phase, SoundType>();
@@ -82,11 +96,10 @@ export function compileSequence(
   }
 
   // ---- 热身阶段 ----
-  {
+  if (has('warmup') && warmupBudget > 0) {
     let filled = 0;
     while (filled < warmupBudget) {
       const action = pickForStage(pickBasic);
-      // 使用用户自定义慢速BPM
       const bpm = prefs.customBpm.slow;
       const dur = randInRange(WARMUP_ACTION_MIN, WARMUP_ACTION_MAX);
       timeline.push(makeAction(action.name, dur, bpm, prefs.customSounds.slow, WARMUP_VOLUME, 'warmup'));
@@ -100,11 +113,13 @@ export function compileSequence(
     }
   }
 
-  // 阶段切换信号: 热身→核心
-  timeline.push({ type: 'transition', signal: 'single_ding', phase: 'core' });
+  // 阶段切换信号: 热身→核心（两者都启用时才插入）
+  if (has('warmup') && has('core') && warmupBudget > 0 && coreBudget > 0) {
+    timeline.push({ type: 'transition', signal: 'single_ding', phase: 'core' });
+  }
 
   // ---- 核心阶段 ----
-  {
+  if (has('core') && coreBudget > 0) {
     let filled = 0;
     while (filled < coreBudget) {
       // 从全部动作池加权抽取（优先锁定动作）
@@ -130,10 +145,12 @@ export function compileSequence(
     }
   }
 
-  // ---- 冲刺阶段（非短周期模式）----
-  if (!isShortMode && sprintBudget > 0) {
-    // 阶段切换: 核心→冲刺
-    timeline.push({ type: 'transition', signal: 'double_ding', phase: 'sprint_start' });
+  // ---- 冲刺阶段 ----
+  if (has('sprint') && !isShortMode && sprintBudget > 0) {
+    // 阶段切换: 核心→冲刺（核心启用且冲刺启用时才插入）
+    if (has('core') && coreBudget > 0) {
+      timeline.push({ type: 'transition', signal: 'double_ding', phase: 'sprint_start' });
+    }
 
     const third = sprintBudget / 3;
 
@@ -192,23 +209,31 @@ export function compileSequence(
     }
 
     // 顶峰→高潮信号
-    timeline.push({ type: 'transition', signal: 'heavy_beats', phase: 'climax' });
-  } else if (isShortMode) {
+    if (has('climax')) {
+      timeline.push({ type: 'transition', signal: 'heavy_beats', phase: 'climax' });
+    }
+  } else if (isShortMode && has('climax')) {
     // 短周期：核心→高潮
     timeline.push({ type: 'transition', signal: 'double_ding', phase: 'climax' });
   }
 
   // ---- 终局序列 ----
   // 高潮冲刺
-  const climaxAction = pickTop();
-  timeline.push(makeAction(climaxAction.name, CLIMAX_DURATION, prefs.customBpm.extreme, prefs.customSounds.extreme, CLIMAX_VOLUME, 'climax'));
+  if (has('climax')) {
+    const climaxAction = pickTop();
+    timeline.push(makeAction(climaxAction.name, CLIMAX_DURATION, prefs.customBpm.extreme, prefs.customSounds.extreme, CLIMAX_VOLUME, 'climax'));
+  }
 
   // 高潮后持续
-  const afterglowAction = pickTop();
-  timeline.push(makeAction(afterglowAction.name, AFTERGLOW_DURATION, prefs.customBpm.fast, prefs.customSounds.fast, AFTERGLOW_VOLUME, 'afterglow'));
+  if (has('afterglow')) {
+    const afterglowAction = pickTop();
+    timeline.push(makeAction(afterglowAction.name, AFTERGLOW_DURATION, prefs.customBpm.fast, prefs.customSounds.fast, AFTERGLOW_VOLUME, 'afterglow'));
+  }
 
   // 收尾段（每3秒一个单音）
-  timeline.push(makeAction('收尾缓冲', COOLDOWN_DURATION, Math.round(60000 / COOLDOWN_INTERVAL), prefs.customSounds.cooldown, COOLDOWN_VOLUME, 'cooldown'));
+  if (has('cooldown')) {
+    timeline.push(makeAction('收尾缓冲', COOLDOWN_DURATION, Math.round(60000 / COOLDOWN_INTERVAL), prefs.customSounds.cooldown, COOLDOWN_VOLUME, 'cooldown'));
+  }
 
   // 结束标记
   timeline.push({ type: 'end' });

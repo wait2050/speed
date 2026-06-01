@@ -8,7 +8,7 @@ import { loadPreferences, savePreferences } from '../storage';
 import { audioEngine } from '../audio/engine';
 import { formatSec } from '../scheduler/clock';
 import { Footer } from '../components/Footer';
-import type { SoundType, SpeedTier } from '../types';
+import type { SoundType, SpeedTier, PhaseOption } from '../types';
 
 const TIER_LABELS: Record<SpeedTier, string> = {
   slow: '慢速',
@@ -31,6 +31,17 @@ export const Home: React.FC = () => {
   const [prefs, setPrefs] = useState(() => loadPreferences());
   const [showSettings, setShowSettings] = useState(false);
   const [audioReady, setAudioReady] = useState(false);
+  const [enabledPhases, setEnabledPhases] = useState<Set<PhaseOption>>(
+    () => new Set<PhaseOption>(['warmup', 'core', 'sprint', 'climax', 'afterglow', 'cooldown'])
+  );
+
+  const togglePhase = useCallback((p: PhaseOption) => {
+    setEnabledPhases(prev => {
+      const next = new Set(prev);
+      if (next.has(p)) next.delete(p); else next.add(p);
+      return next;
+    });
+  }, []);
 
   const handleInitAudio = useCallback(async () => {
     await audioEngine.init();
@@ -49,10 +60,10 @@ export const Home: React.FC = () => {
     // 编译器是纯函数，但用 setTimeout 避免阻塞 UI
     setTimeout(() => {
       const totalMs = prefs.defaultDuration * 1000;
-      const compiled = compileSequence(totalMs, prefs);
+      const compiled = compileSequence(totalMs, prefs, undefined, { enabled: enabledPhases });
       dispatch({ type: 'COMPILATION_DONE', payload: compiled });
     }, 50);
-  }, [dispatch, prefs, audioReady]);
+  }, [dispatch, prefs, audioReady, enabledPhases]);
 
   const handleDurationChange = useCallback((val: number) => {
     const newPrefs = { ...prefs, defaultDuration: val };
@@ -116,6 +127,29 @@ export const Home: React.FC = () => {
               onClick={() => handleDurationChange(p * 60)}
             >
               {p}′
+            </button>
+          ))}
+        </div>
+      </section>
+
+      {/* 阶段选择 */}
+      <section className="phase-toggles">
+        <span className="phase-toggles-label">包含阶段</span>
+        <div className="phase-toggles-row">
+          {([
+            ['warmup', '热身'],
+            ['core', '核心'],
+            ['sprint', '冲刺'],
+            ['climax', '高潮'],
+            ['afterglow', '余韵'],
+            ['cooldown', '收尾'],
+          ] as [PhaseOption, string][]).map(([key, label]) => (
+            <button
+              key={key}
+              className={`phase-toggle ${enabledPhases.has(key) ? 'active' : ''}`}
+              onClick={() => togglePhase(key)}
+            >
+              {label}
             </button>
           ))}
         </div>

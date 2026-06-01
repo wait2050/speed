@@ -77,6 +77,17 @@ export interface CompiledSequence {
   stats: SequenceStats;
 }
 
+// --- 阶段选项（用户可开关） ---
+export type PhaseOption = 'warmup' | 'core' | 'sprint' | 'climax' | 'afterglow' | 'cooldown';
+
+export interface PhaseConfig {
+  enabled: Set<PhaseOption>;
+}
+
+export const DEFAULT_PHASE_CONFIG: PhaseConfig = {
+  enabled: new Set<PhaseOption>(['warmup', 'core', 'sprint', 'climax', 'afterglow', 'cooldown']),
+};
+
 // --- 用户偏好 ---
 export interface UserPreferences {
   defaultDuration: number;       // 秒
