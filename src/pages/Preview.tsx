@@ -8,15 +8,14 @@ import { loadPreferences } from '../storage';
 import { formatMs } from '../scheduler/clock';
 import type { TimelineItem } from '../types';
 
-/** 从 timeline 中提取动作项及其序号 */
-function extractActions(timeline: TimelineItem[]): { index: number; item: TimelineItem & { type: 'action' } }[] {
-  const result: { index: number; item: TimelineItem & { type: 'action' } }[] = [];
+/** 从 timeline 中提取动作+休息项及其序号 */
+type ActionOrRest = TimelineItem & { type: 'action' | 'rest' };
+function extractItems(timeline: TimelineItem[]): { index: number; item: ActionOrRest }[] {
+  const result: { index: number; item: ActionOrRest }[] = [];
   let idx = 0;
   for (const item of timeline) {
-    if (item.type === 'action') {
-      result.push({ index: idx, item });
-    }
     if (item.type === 'action' || item.type === 'rest') {
+      result.push({ index: idx, item });
       idx++;
     }
   }
@@ -32,7 +31,7 @@ export const Preview: React.FC = () => {
   const [lockedActions, setLockedActions] = useState<Map<number, string>>(new Map());
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
 
-  const actionItems = useMemo(() => extractActions(compiled.timeline), [compiled]);
+  const timelineItems = useMemo(() => extractItems(compiled.timeline), [compiled]);
 
   const handleStart = useCallback(() => {
     dispatch({ type: 'START_PLAYING' });
@@ -70,10 +69,14 @@ export const Preview: React.FC = () => {
     setExpandedIdx(null);
   }, []);
 
-  // 可替换的动作池（同速度档位）
-  const allActionNames = [...new Set(
-    [...actionItems.map(a => a.item.name), '从上方和下方捏住并旋转', '隔着内衣用指甲抓挠', '捏住并不断变换力度', '捏住并轻轻向外侧拉', '夹住周围区域', '用指腹温柔摩擦', '用指甲拨动', '按压', '振动手指', '反复碰触', '摩擦周围区域', '摩擦目标区域和周围区域']
-  )];
+  // 可替换的动作池
+  const allActionNames = [...new Set([
+    ...timelineItems.filter(i => i.item.type === 'action').map(a => (a.item as TimelineItem & { type: 'action' }).name),
+    '从上方和下方捏住并旋转', '隔着内衣用指甲抓挠',
+    '捏住并不断变换力度', '捏住并轻轻向外侧拉', '夹住周围区域',
+    '用指腹温柔摩擦', '用指甲拨动', '按压',
+    '振动手指', '反复碰触', '摩擦周围区域', '摩擦目标区域和周围区域',
+  ])];
 
   return (
     <div className="page preview-page">
@@ -106,31 +109,42 @@ export const Preview: React.FC = () => {
 
       {/* 可编辑序列列表 */}
       <div className="sequence-scroll">
-        {actionItems.map(({ index, item }) => {
-          const isLocked = lockedActions.get(index) === item.name;
+        {timelineItems.map(({ index, item }) => {
+          const isLocked = item.type === 'action' && lockedActions.get(index) === item.name;
           const isExpanded = expandedIdx === index;
 
           return (
-            <div key={index} className="edit-action-row">
+            <div key={index} className={`edit-action-row ${item.type === 'rest' ? 'rest-row' : ''}`}>
               <div className="edit-action-main">
-                <button
-                  className={`lock-btn ${isLocked ? 'locked' : ''}`}
-                  onClick={() => toggleLock(index, item.name)}
-                  title={isLocked ? '已锁定（重新编排不变）' : '点击锁定此动作'}
-                >
-                  {isLocked ? '🔒' : '🔓'}
-                </button>
-                <span className="edit-action-name">{item.name}</span>
-                <span className="edit-action-dur">{Math.round(item.duration / 1000)}s</span>
-                <button
-                  className="edit-expand-btn"
-                  onClick={() => setExpandedIdx(isExpanded ? null : index)}
-                >
-                  {isExpanded ? '▲' : '▼'}
-                </button>
+                {item.type === 'rest' ? (
+                  <>
+                    <span className="lock-btn" style={{ visibility: 'hidden' }}>🔓</span>
+                    <span className="edit-action-name rest-name">休息</span>
+                    <span className="edit-action-dur">{Math.round(item.duration / 1000)}s</span>
+                    <span className="edit-expand-btn" style={{ visibility: 'hidden' }}>▼</span>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      className={`lock-btn ${isLocked ? 'locked' : ''}`}
+                      onClick={() => toggleLock(index, item.name)}
+                      title={isLocked ? '已锁定（重新编排不变）' : '点击锁定此动作'}
+                    >
+                      {isLocked ? '🔒' : '🔓'}
+                    </button>
+                    <span className="edit-action-name">{item.name}</span>
+                    <span className="edit-action-dur">{Math.round(item.duration / 1000)}s</span>
+                    <button
+                      className="edit-expand-btn"
+                      onClick={() => setExpandedIdx(isExpanded ? null : index)}
+                    >
+                      {isExpanded ? '▲' : '▼'}
+                    </button>
+                  </>
+                )}
               </div>
 
-              {isExpanded && (
+              {isExpanded && item.type === 'action' && (
                 <div className="edit-action-options">
                   <div className="replace-options">
                     <span className="replace-label">替换为：</span>
