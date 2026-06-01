@@ -30,27 +30,25 @@ export const Player: React.FC = () => {
   const { state, dispatch } = useAppState();
   const rootRef = useRef<HTMLDivElement>(null);
   const schedulerRef = useRef<PlaybackScheduler | null>(null);
+
   const [actionName, setActionName] = useState('准备开始...');
-  const [remainingMs, setRemainingMs] = useState(0);
+  const [actionRemainingMs, setActionRemainingMs] = useState(0);
+  const [totalElapsedMs, setTotalElapsedMs] = useState(0);
   const [currentPhase, setCurrentPhase] = useState<Phase>('warmup');
   const [isPaused, setIsPaused] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const pausedRef = useRef(false);
 
   const compiled = state.compiled;
 
   // 安全保护
   useEffect(() => {
     if (!state.compiled) {
-      console.error('[Player] compiled is null, resetting');
       dispatch({ type: 'RESET' });
     }
   }, [state.compiled, dispatch]);
 
-  // 屏幕常亮
   useWakeLock(true);
 
-  // 防误触
   useEffect(() => {
     const el = rootRef.current;
     if (!el) return;
@@ -60,39 +58,31 @@ export const Player: React.FC = () => {
 
   // 启动调度器
   useEffect(() => {
-    if (!compiled || !compiled.timeline || compiled.timeline.length === 0) {
-      console.error('[Player] no compiled timeline');
-      return;
-    }
-
-    console.log('[Player] starting scheduler, timeline length:', compiled.timeline.length);
+    if (!compiled?.timeline?.length) return;
 
     audioEngine.resume().catch(() => {});
 
     try {
-      const scheduler = new PlaybackScheduler(
+      const s = new PlaybackScheduler(
         audioEngine,
-        (name, remaining, phase) => {
+        (name, actionRemaining, totalElapsed, phase) => {
           setActionName(name);
-          setRemainingMs(remaining);
+          setActionRemainingMs(actionRemaining);
+          setTotalElapsedMs(totalElapsed);
           setCurrentPhase(phase);
-          dispatch({ type: 'UPDATE_PROGRESS', payload: { actionName: name, remainingMs: remaining, phase } });
+          dispatch({ type: 'UPDATE_PROGRESS', payload: { actionName: name, remainingMs: actionRemaining, phase } });
         },
-        (phase) => {
-          setCurrentPhase(phase);
-        },
+        (phase) => setCurrentPhase(phase),
         () => {
           dispatch({ type: 'PLAYBACK_FINISHED' });
           clearProgress();
         },
       );
 
-      schedulerRef.current = scheduler;
-      scheduler.start(compiled.timeline);
+      schedulerRef.current = s;
+      s.start(compiled.timeline);
       setIsPaused(false);
-      pausedRef.current = false;
     } catch (e: any) {
-      console.error('[Player] scheduler error:', e);
       setError(e?.message ?? '调度器启动失败');
     }
 
@@ -106,51 +96,48 @@ export const Player: React.FC = () => {
   useEffect(() => {
     if (!compiled) return;
     const timeline = compiled.timeline;
-    const interval = setInterval(() => {
+    const iv = setInterval(() => {
       if (schedulerRef.current?.isRunning) {
         saveProgress(timeline, schedulerRef.current.elapsed);
       }
     }, 5000);
-    return () => clearInterval(interval);
+    return () => clearInterval(iv);
   }, [compiled]);
 
-  // 页面切后台
+  // 页面切后台自动暂停
   useEffect(() => {
-    const onVisibility = () => {
+    const onVis = () => {
+      const s = schedulerRef.current;
+      if (!s) return;
       if (document.hidden) {
-        schedulerRef.current?.pause();
+        s.pause();
         setIsPaused(true);
-        pausedRef.current = true;
       } else {
-        schedulerRef.current?.resume();
+        s.resume();
         setIsPaused(false);
-        pausedRef.current = false;
       }
     };
-    document.addEventListener('visibilitychange', onVisibility);
-    return () => document.removeEventListener('visibilitychange', onVisibility);
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
   }, []);
 
-  // 暂停/继续
+  // 暂停 / 继续
   const togglePause = useCallback(() => {
     const s = schedulerRef.current;
     if (!s) return;
-    if (pausedRef.current) {
+    if (isPaused) {
       s.resume();
       setIsPaused(false);
-      pausedRef.current = false;
     } else {
       s.pause();
       setIsPaused(true);
-      pausedRef.current = true;
     }
-  }, []);
+  }, [isPaused]);
 
   // 点击进度条跳转
   const handleSeek = useCallback((targetMs: number) => {
     schedulerRef.current?.seek(targetMs);
     setIsPaused(false);
-    pausedRef.current = false;
   }, []);
 
   // 停止
@@ -160,59 +147,44 @@ export const Player: React.FC = () => {
     clearProgress();
   }, [dispatch]);
 
-  // 阶段分段（进度条用）
+  // 阶段分段
   const segments: PhaseSegment[] = useMemo(
     () => (compiled ? computePhaseSegments(compiled.timeline) : []),
     [compiled]
   );
 
   const totalMs = compiled?.stats?.totalDuration || 0;
-  const elapsedMs = totalMs - remainingMs;
 
   if (!compiled) {
-    return (
-      <div className="page player-page">
-        <p style={{ color: '#8888aa', fontSize: 14 }}>加载编排数据失败，正在返回...</p>
-      </div>
-    );
+    return <div className="page player-page"><p style={{ color: '#8888aa' }}>加载失败，返回中...</p></div>;
   }
-
   if (error) {
     return (
       <div className="page player-page">
-        <p style={{ color: '#e94560', fontSize: 14 }}>播放出错：{error}</p>
-        <button className="btn btn-recompile" onClick={() => dispatch({ type: 'RESET' })} style={{ marginTop: 16 }}>
-          返回首页
-        </button>
+        <p style={{ color: '#e94560' }}>错误：{error}</p>
+        <button className="btn btn-recompile" onClick={() => dispatch({ type: 'RESET' })} style={{ marginTop: 16 }}>返回</button>
       </div>
     );
   }
 
   return (
     <div className="page player-page" ref={rootRef}>
-      {/* 进度条 */}
+      {/* 全局进度条 */}
       <ProgressBar
         segments={segments}
-        elapsedMs={elapsedMs}
+        elapsedMs={totalElapsedMs}
         totalMs={totalMs}
         currentPhaseLabel={phaseLabels[currentPhase] ?? currentPhase}
         onSeek={handleSeek}
       />
 
-      {/* 阶段标签 */}
-      <div className="player-phase">
-        {phaseLabels[currentPhase] ?? '准备中'}
-      </div>
+      <div className="player-phase">{phaseLabels[currentPhase] ?? '准备中'}</div>
 
-      {/* 动作名称 */}
-      <div className="player-action-name">
-        {actionName}
-      </div>
+      <div className="player-action-name">{actionName}</div>
 
-      {/* 倒计时 */}
-      <Timer remainingMs={remainingMs} totalMs={totalMs > 0 ? totalMs : 60000} />
+      {/* 当前动作倒计时 */}
+      <Timer remainingMs={actionRemainingMs} totalMs={actionRemainingMs > 0 ? actionRemainingMs : 60000} />
 
-      {/* 控制按钮 */}
       <div className="player-controls">
         <button className="btn btn-pause" onClick={togglePause}>
           {isPaused ? '▶ 继续' : '⏸ 暂停'}

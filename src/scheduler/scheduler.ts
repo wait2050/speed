@@ -6,7 +6,7 @@ import { AudioEngine } from '../audio/engine';
 import { bpmToInterval } from './clock';
 import { BPM_BOOST_DURATION, BPM_BOOST_AMOUNT } from '../compiler/rules';
 
-export type UICallback = (actionName: string, remainingMs: number, phase: Phase) => void;
+export type UICallback = (actionName: string, actionRemainingMs: number, totalElapsedMs: number, phase: Phase) => void;
 export type PhaseCallback = (phase: Phase) => void;
 export type FinishCallback = () => void;
 
@@ -166,7 +166,7 @@ export class PlaybackScheduler {
             this.currentPhase = item.phase;
             this.onPhase(item.phase);
           }
-          this.onUI(item.name, remainingMs, item.phase);
+          this.onUI(item.name, remainingMs, elapsedMs, item.phase);
 
           // 动作切换时播放语音引导，并记录语音结束时间
           const voiceKey = `action_${accumulatedMs}`;
@@ -177,7 +177,7 @@ export class PlaybackScheduler {
           }
         } else if (item.type === 'rest') {
           this.currentActionName = '休息中';
-          this.onUI('休息中', remainingMs, item.phase);
+          this.onUI('休息中', remainingMs, elapsedMs, item.phase);
 
           // 休息开始也播放语音，并记录语音结束时间
           const voiceKey = `rest_${accumulatedMs}`;
