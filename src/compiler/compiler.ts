@@ -178,13 +178,16 @@ export function compileSequence(
       let filled = 0;
       while (filled < third) {
         const action = pickForStage(pickTopFiltered, pickTopFiltered());
-        const dur = Math.min(randInRange(SPRINT_ACTION_MAX - 10000, SPRINT_ACTION_MAX), SPRINT_ACTION_MAX);
+        // 为休息预留空间
+        const maxDur = third - filled - SPRINT_REST;
+        const dur = maxDur > 20000
+          ? Math.min(randInRange(SPRINT_ACTION_MAX - 10000, SPRINT_ACTION_MAX), maxDur)
+          : maxDur;
+        if (dur < 10000) break;
         timeline.push(makeAction(action.name, dur, SPRINT_START_BPM, prefs.customSounds.medium, SPRINT_VOLUME, 'sprint_start'));
         filled += dur;
-        if (filled + SPRINT_REST <= third) {
-          timeline.push({ type: 'rest', duration: SPRINT_REST, phase: 'sprint_start' });
-          filled += SPRINT_REST;
-        }
+        timeline.push({ type: 'rest', duration: SPRINT_REST, phase: 'sprint_start' });
+        filled += SPRINT_REST;
         sprintRounds++;
       }
     }
@@ -194,13 +197,15 @@ export function compileSequence(
       let filled = 0;
       while (filled < third) {
         const action = pickForStage(pickTopFiltered, pickTopFiltered());
-        const dur = Math.min(randInRange(SPRINT_ACTION_MAX - 10000, SPRINT_ACTION_MAX), SPRINT_ACTION_MAX);
+        const maxDur = third - filled - SPRINT_REST;
+        const dur = maxDur > 20000
+          ? Math.min(randInRange(SPRINT_ACTION_MAX - 10000, SPRINT_ACTION_MAX), maxDur)
+          : maxDur;
+        if (dur < 10000) break;
         timeline.push(makeAction(action.name, dur, SPRINT_ACCEL_BPM, prefs.customSounds.fast, SPRINT_VOLUME, 'sprint_accel'));
         filled += dur;
-        if (filled + SPRINT_REST <= third) {
-          timeline.push({ type: 'rest', duration: SPRINT_REST, phase: 'sprint_accel' });
-          filled += SPRINT_REST;
-        }
+        timeline.push({ type: 'rest', duration: SPRINT_REST, phase: 'sprint_accel' });
+        filled += SPRINT_REST;
         sprintRounds++;
       }
     }
