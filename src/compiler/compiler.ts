@@ -29,10 +29,15 @@ export function compileSequence(
   lockedActions?: Map<number, string>,
   phaseConfig?: import('../types').PhaseConfig,
   enabledActions?: Set<string>,
+  climaxMin?: number,    // 高潮冲刺时长（分钟），默认3
+  afterglowMin?: number, // 余韵时长（分钟），默认1
 ): CompiledSequence {
   const timeline: TimelineItem[] = [];
   const enabled = phaseConfig?.enabled ?? new Set(['warmup','core','sprint','climax','afterglow','cooldown'] as const);
   const has = (p: string) => enabled.has(p as any);
+
+  const climaxMs = (climaxMin ?? 3) * 60 * 1000;
+  const afterglowMs = (afterglowMin ?? 1) * 60 * 1000;
 
   // 过滤动作池
   const filterPool = <T extends { name: string }>(pool: T[]): T[] =>
@@ -52,10 +57,10 @@ export function compileSequence(
     return weightedPick(all);
   };
 
-  // 1. 终局序列固定时长（根据开关计算）
+  // 1. 终局序列固定时长（根据开关+用户设定计算）
   let FINALE_DURATION = 0;
-  if (has('climax')) FINALE_DURATION += CLIMAX_DURATION;
-  if (has('afterglow')) FINALE_DURATION += AFTERGLOW_DURATION;
+  if (has('climax')) FINALE_DURATION += climaxMs;
+  if (has('afterglow')) FINALE_DURATION += afterglowMs;
   if (has('cooldown')) FINALE_DURATION += COOLDOWN_DURATION;
 
   // 2. 短周期模式：<10分钟，仅热身+核心+终局，不单独分配冲刺
@@ -239,8 +244,9 @@ export function compileSequence(
       }
     }
 
-    // 顶峰→高潮信号
+    // 顶峰→高潮：先休息15s，再给信号
     if (has('climax')) {
+      timeline.push({ type: 'rest', duration: SPRINT_REST, phase: 'sprint_peak' });
       timeline.push({ type: 'transition', signal: 'heavy_beats', phase: 'climax' });
     }
   } else if (isShortMode && has('climax')) {
@@ -252,13 +258,13 @@ export function compileSequence(
   // 高潮冲刺
   if (has('climax')) {
     const climaxAction = pickTopFiltered();
-    timeline.push(makeAction(climaxAction.name, CLIMAX_DURATION, prefs.customBpm.extreme, prefs.customSounds.extreme, CLIMAX_VOLUME, 'climax'));
+    timeline.push(makeAction(climaxAction.name, climaxMs, prefs.customBpm.extreme, prefs.customSounds.extreme, CLIMAX_VOLUME, 'climax'));
   }
 
   // 高潮后持续
   if (has('afterglow')) {
     const afterglowAction = pickTopFiltered();
-    timeline.push(makeAction(afterglowAction.name, AFTERGLOW_DURATION, prefs.customBpm.fast, prefs.customSounds.fast, AFTERGLOW_VOLUME, 'afterglow'));
+    timeline.push(makeAction(afterglowAction.name, afterglowMs, prefs.customBpm.fast, prefs.customSounds.fast, AFTERGLOW_VOLUME, 'afterglow'));
   }
 
   // 收尾段（每3秒一个单音）

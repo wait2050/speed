@@ -46,6 +46,9 @@ export const Home: React.FC = () => {
     () => new Set(ALL_ACTION_NAMES)
   );
 
+  const [climaxMin, setClimaxMin] = useState(3);     // 高潮冲刺 1-5 分钟
+  const [afterglowMin, setAfterglowMin] = useState(1); // 余韵 1-3 分钟
+
   const togglePhase = useCallback((p: PhaseOption) => {
     setEnabledPhases(prev => {
       const next = new Set(prev);
@@ -79,10 +82,10 @@ export const Home: React.FC = () => {
     // 编译器是纯函数，但用 setTimeout 避免阻塞 UI
     setTimeout(() => {
       const totalMs = prefs.defaultDuration * 1000;
-      const compiled = compileSequence(totalMs, prefs, undefined, { enabled: enabledPhases }, enabledActions);
+      const compiled = compileSequence(totalMs, prefs, undefined, { enabled: enabledPhases }, enabledActions, climaxMin, afterglowMin);
       dispatch({ type: 'COMPILATION_DONE', payload: compiled });
     }, 50);
-  }, [dispatch, prefs, audioReady, enabledPhases, enabledActions]);
+  }, [dispatch, prefs, audioReady, enabledPhases, enabledActions, climaxMin, afterglowMin]);
 
   const handleDurationChange = useCallback((val: number) => {
     const newPrefs = { ...prefs, defaultDuration: val };
@@ -169,6 +172,33 @@ export const Home: React.FC = () => {
               onClick={() => togglePhase(key)}
             >
               {label}
+            </button>
+          ))}
+        </div>
+      </section>
+
+      {/* 高潮/余韵时长 */}
+      <section className="phase-toggles">
+        <span className="phase-toggles-label">高潮冲刺 {climaxMin} 分钟 · 余韵 {afterglowMin} 分钟</span>
+        <div className="phase-toggles-row">
+          <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)', alignSelf: 'center' }}>高潮</span>
+          {[1, 2, 3, 4, 5].map(m => (
+            <button
+              key={`c${m}`}
+              className={`phase-toggle ${climaxMin === m ? 'active' : ''}`}
+              onClick={() => setClimaxMin(m)}
+            >
+              {m}′
+            </button>
+          ))}
+          <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)', alignSelf: 'center', marginLeft: 8 }}>余韵</span>
+          {[1, 2, 3].map(m => (
+            <button
+              key={`a${m}`}
+              className={`phase-toggle ${afterglowMin === m ? 'active' : ''}`}
+              onClick={() => setAfterglowMin(m)}
+            >
+              {m}′
             </button>
           ))}
         </div>
