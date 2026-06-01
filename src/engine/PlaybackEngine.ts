@@ -68,6 +68,7 @@ export class PlaybackEngine {
   private elapsedBeforePause = 0;
   private timerId: ReturnType<typeof setInterval> | null = null;
   private scheduledBeats = new Set<number>();
+  private snapsPlayed = new Set<number>(); // 已播放的响指位置（防止重复）
   private lastVoiceKey = '';
   private voiceEndTime = 0;
 
@@ -122,6 +123,7 @@ export class PlaybackEngine {
     this.pausedAt = null;
     this.elapsedBeforePause = 0;
     this.scheduledBeats.clear();
+    this.snapsPlayed.clear();
     this.lastVoiceKey = '';
     this.voiceEndTime = 0;
     this.startTime = this.ctx.currentTime;
@@ -155,6 +157,7 @@ export class PlaybackEngine {
     const wasPaused = this.isPaused;
     if (this.timerId) { clearInterval(this.timerId); this.timerId = null; }
     this.scheduledBeats.clear();
+    this.snapsPlayed.clear();
     this.lastVoiceKey = '';
     this.voiceEndTime = 0;
     this.startTime = this.ctx.currentTime - targetMs / 1000;
@@ -259,9 +262,13 @@ export class PlaybackEngine {
         }
       }
 
-      // 打响指：经过时立即播放
-      if (item.type === 'snap' && elapsedMs >= accumulatedMs && elapsedMs < accumulatedMs + 500) {
-        this.playSnap();
+      // 打响指：经过时立即播放（每个位置只播一次）
+      if (item.type === 'snap') {
+        const snapKey = Math.round(accumulatedMs);
+        if (elapsedMs >= accumulatedMs && !this.snapsPlayed.has(snapKey)) {
+          this.snapsPlayed.add(snapKey);
+          this.playSnap();
+        }
       }
 
       if (item.type === 'action' || item.type === 'rest') {
@@ -427,17 +434,18 @@ export class PlaybackEngine {
     return buf;
   }
 
-  /** 合成打响指：极短噪声 + 带通滤波 */
+  /** 合成打响指：极短高频噪声 + 带通滤波 */
   private makeSnap(): AudioBuffer {
     const sr = 44100;
-    const len = Math.ceil(0.03 * sr); // 30ms
+    const len = Math.ceil(0.04 * sr); // 40ms
     const buf = new AudioBuffer({ length: len, sampleRate: sr });
     const ch = buf.getChannelData(0);
     for (let i = 0; i < len; i++) {
       const t = i / sr;
-      // 白噪声 × 指数衰减（极快的起音+衰减）
-      const env = Math.exp(-t / 0.004); // 极快衰减
-      ch[i] = (Math.random() * 2 - 1) * 0.6 * env;
+      // 极快起音 + 快速衰减（模拟响指瞬态）
+      const attack = Math.min(1, t / 0.001);  // 1ms 起音
+      const decay = Math.exp(-t / 0.006);       // 6ms 半衰期
+      ch[i] = (Math.random() * 2 - 1) * 0.8 * attack * decay;
     }
     return buf;
   }
@@ -447,14 +455,20 @@ export class PlaybackEngine {
     if (!this.ctx || !this.snapBuffer) return;
     const src = this.ctx.createBufferSource();
     src.buffer = this.snapBuffer;
-    // 带通滤波器（3kHz 中心）
-    const filter = this.ctx.createBiquadFilter();
-    filter.type = 'bandpass';
-    filter.frequency.value = 3000;
-    filter.Q.value = 3;
+    // 高通 + 带通组合，强调高频
+    const hp = this.ctx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = 1500;
+    const bp = this.ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = 4000;
+    bp.Q.value = 2;
     const gain = this.ctx.createGain();
-    gain.gain.value = 0.5;
-    src.connect(filter).connect(gain).connect(this.ctx.destination);
+    gain.gain.value = 0.8;
+    src.connect(hp);
+    hp.connect(bp);
+    bp.connect(gain);
+    gain.connect(this.ctx.destination);
     src.start(this.ctx.currentTime + 0.005);
   }
 }
