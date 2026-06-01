@@ -1,9 +1,10 @@
 // ============================================================
 // Sidebar — 侧边栏组件（历史/收藏/自助编排入口）
 // ============================================================
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { loadHistory, loadFavorites, removeFavorite } from '../storage';
 import { formatSec } from '../scheduler/clock';
+import { readImportFile } from '../storage/export';
 import type { HistoryEntry, Favorite, CompiledSequence } from '../types';
 
 interface Props {
@@ -18,6 +19,8 @@ export const Sidebar: React.FC<Props> = ({ isOpen, onClose, onLoadSequence }) =>
   const [tab, setTab] = useState<Tab>('history');
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [favorites, setFavorites] = useState<Favorite[]>([]);
+  const [importError, setImportError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -35,6 +38,25 @@ export const Sidebar: React.FC<Props> = ({ isOpen, onClose, onLoadSequence }) =>
     removeFavorite(id);
     setFavorites(prev => prev.filter(f => f.id !== id));
   }, []);
+
+  const handleImport = useCallback(() => {
+    fileInputRef.current?.click();
+  }, []);
+
+  const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImportError(null);
+    try {
+      const data = await readImportFile(file);
+      onLoadSequence(data.sequence);
+      onClose();
+    } catch (err: any) {
+      setImportError(err.message);
+    }
+    // reset input
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  }, [onLoadSequence, onClose]);
 
   if (!isOpen) return null;
 
@@ -66,8 +88,21 @@ export const Sidebar: React.FC<Props> = ({ isOpen, onClose, onLoadSequence }) =>
       <div className="sidebar-panel">
         <div className="sidebar-header">
           <h3>菜单</h3>
-          <button className="sidebar-close" onClick={onClose}>✕</button>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button className="sidebar-close" onClick={handleImport} title="导入编排">📥</button>
+            <button className="sidebar-close" onClick={onClose}>✕</button>
+          </div>
         </div>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".json"
+          style={{ display: 'none' }}
+          onChange={handleFileChange}
+        />
+        {importError && (
+          <p style={{ fontSize: 11, color: '#e94560', padding: '0 20px 8px' }}>{importError}</p>
+        )}
 
         {/* Tab 切换 */}
         <div className="sidebar-tabs">

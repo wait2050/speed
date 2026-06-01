@@ -4,7 +4,8 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { useAppState } from '../state/context';
 import { BreathingLight } from '../components/BreathingLight';
-import { saveHistory, saveFavorite } from '../storage';
+import { saveHistory, saveFavorite, loadPreferences } from '../storage';
+import { buildExportData, downloadExport } from '../storage/export';
 import type { HistoryEntry } from '../types';
 
 export const Landing: React.FC = () => {
@@ -113,9 +114,28 @@ export const Landing: React.FC = () => {
       )}
 
       {phase === 'done' && (
-        <button className="btn btn-home" onClick={handleReset}>
-          返回首页
-        </button>
+        <>
+          <button className="btn btn-home" onClick={handleReset}>
+            返回首页
+          </button>
+          <button
+            className="btn btn-save"
+            style={{ marginTop: 8 }}
+            onClick={() => {
+              if (!state.compiled) return;
+              const data = buildExportData(
+                state.totalDuration,
+                ['warmup','core','sprint','climax','afterglow','cooldown'],
+                [],
+                3, 1,
+                state.compiled,
+              );
+              downloadExport(data);
+            }}
+          >
+            💾 导出编排
+          </button>
+        </>
       )}
     </div>
   );
