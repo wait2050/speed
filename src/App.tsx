@@ -1,28 +1,29 @@
 // ============================================================
-// App — 状态驱动页面路由
+// App — 状态驱动页面路由 + 侧边栏
 // ============================================================
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import { useAppState, AppProvider } from './state/context';
 import { Home } from './pages/Home';
 import { Preview } from './pages/Preview';
 import { Player } from './pages/Player';
 import { Landing } from './pages/Landing';
+import { Sidebar } from './components/Sidebar';
 import { loadProgress } from './storage';
 import { audioEngine } from './audio/engine';
+import type { CompiledSequence } from './types';
 import './index.css';
 
 const AppInner: React.FC = () => {
   const { state, dispatch } = useAppState();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  // 检测未完成编排（延迟执行，避免阻塞首屏渲染）
+  // 检测未完成编排
   React.useEffect(() => {
     const timer = setTimeout(() => {
       try {
         const saved = loadProgress();
         if (saved && state.status === 'IDLE') {
-          const resume = window.confirm(
-            '检测到上次未完成的播放，是否继续？'
-          );
+          const resume = window.confirm('检测到上次未完成的播放，是否继续？');
           if (resume) {
             audioEngine.init().then(() => {
               dispatch({
@@ -38,26 +39,48 @@ const AppInner: React.FC = () => {
     return () => clearTimeout(timer);
   }, []); // eslint-disable-line
 
-  switch (state.status) {
-    case 'IDLE':
-      return <Home />;
-    case 'COMPILING':
-      return (
-        <div className="page loading-page">
-          <div className="loading-spinner" />
-          <p>正在生成编排...</p>
-        </div>
-      );
-    case 'READY':
-      return <Preview />;
-    case 'PLAYING':
-    case 'PAUSED':
-      return <Player />;
-    case 'FINISHED':
-      return <Landing />;
-    default:
-      return <Home />;
-  }
+  // 从侧边栏加载编排
+  const handleLoadSequence = useCallback((seq: CompiledSequence) => {
+    dispatch({ type: 'COMPILATION_DONE', payload: seq });
+  }, [dispatch]);
+
+  const showHamburger = state.status === 'IDLE' || state.status === 'READY' || state.status === 'FINISHED';
+
+  const page = (() => {
+    switch (state.status) {
+      case 'IDLE': return <Home />;
+      case 'COMPILING':
+        return (
+          <div className="page loading-page">
+            <div className="loading-spinner" />
+            <p>正在生成编排...</p>
+          </div>
+        );
+      case 'READY': return <Preview />;
+      case 'PLAYING':
+      case 'PAUSED': return <Player />;
+      case 'FINISHED': return <Landing />;
+      default: return <Home />;
+    }
+  })();
+
+  return (
+    <>
+      {showHamburger && (
+        <button className="btn-hamburger" onClick={() => setSidebarOpen(true)}>
+          ☰
+        </button>
+      )}
+
+      {page}
+
+      <Sidebar
+        isOpen={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+        onLoadSequence={handleLoadSequence}
+      />
+    </>
+  );
 };
 
 const App: React.FC = () => {

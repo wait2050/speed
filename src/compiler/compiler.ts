@@ -68,12 +68,24 @@ export function compileSequence(
   let warmupRounds = 0;
   let coreRounds = 0;
   let sprintRounds = 0;
+  let actionIndex = 0; // 全局动作序号，用于 lockedActions
+
+  // 根据 lockedActions 获取指定动作（未锁定时从池中随机）
+  function pickForStage<T extends { name: string }>(poolFn: () => T, defaultAction?: T): T {
+    const locked = lockedActions?.get(actionIndex);
+    actionIndex++;
+    if (locked) {
+      const found = ALL_ACTIONS.find(a => a.name === locked) as T | undefined;
+      if (found) return found;
+    }
+    return (defaultAction ?? poolFn()) as T;
+  }
 
   // ---- 热身阶段 ----
   {
     let filled = 0;
     while (filled < warmupBudget) {
-      const action = pickBasic();
+      const action = pickForStage(pickBasic);
       // 使用用户自定义慢速BPM
       const bpm = prefs.customBpm.slow;
       const dur = randInRange(WARMUP_ACTION_MIN, WARMUP_ACTION_MAX);
@@ -95,8 +107,8 @@ export function compileSequence(
   {
     let filled = 0;
     while (filled < coreBudget) {
-      // 从全部动作池加权抽取（锁定动作在 UI 层处理，此处始终用全池）
-      const action = weightedPick(ALL_ACTIONS);
+      // 从全部动作池加权抽取（优先锁定动作）
+      const action = pickForStage(() => weightedPick(ALL_ACTIONS), weightedPick(ALL_ACTIONS));
 
       const dur = randInRange(CORE_ACTION_MIN, CORE_ACTION_MAX);
       // 核心阶段音色：慢速用woodblock，快速用heartbeat
@@ -129,7 +141,7 @@ export function compileSequence(
     {
       let filled = 0;
       while (filled < third) {
-        const action = pickTop();
+        const action = pickForStage(() => pickTop(), pickTop());
         const dur = Math.min(randInRange(SPRINT_ACTION_MAX - 10000, SPRINT_ACTION_MAX), SPRINT_ACTION_MAX);
         timeline.push(makeAction(action.name, dur, SPRINT_START_BPM, prefs.customSounds.medium, SPRINT_VOLUME, 'sprint_start'));
         filled += dur;
@@ -145,7 +157,7 @@ export function compileSequence(
     {
       let filled = 0;
       while (filled < third) {
-        const action = pickTop();
+        const action = pickForStage(() => pickTop(), pickTop());
         const dur = Math.min(randInRange(SPRINT_ACTION_MAX - 10000, SPRINT_ACTION_MAX), SPRINT_ACTION_MAX);
         timeline.push(makeAction(action.name, dur, SPRINT_ACCEL_BPM, prefs.customSounds.fast, SPRINT_VOLUME, 'sprint_accel'));
         filled += dur;
@@ -161,7 +173,7 @@ export function compileSequence(
     {
       let filled = 0;
       while (filled < third) {
-        const action = pickTop();
+        const action = pickForStage(() => pickTop(), pickTop());
         const segDur = Math.min(SPRINT_ACTION_MAX, third - filled);
         const dur = Math.min(randInRange(30000, segDur), SPRINT_ACTION_MAX);
         timeline.push(makeAction(action.name, dur, SPRINT_PEAK_BPM, prefs.customSounds.extreme, SPRINT_VOLUME, 'sprint_peak'));

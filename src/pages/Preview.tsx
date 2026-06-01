@@ -1,23 +1,79 @@
 // ============================================================
-// Preview — 编排预览：统计 + 序列列表 + 开始按钮
+// Preview — 编排预览：统计 + 可编辑序列 + 开始按钮
 // ============================================================
-import React, { useMemo, useCallback } from 'react';
+import React, { useMemo, useCallback, useState } from 'react';
 import { useAppState } from '../state/context';
-import { SequenceList } from '../components/SequenceList';
-import { formatMs, formatSec } from '../scheduler/clock';
+import { compileSequence } from '../compiler/compiler';
+import { loadPreferences } from '../storage';
+import { formatMs } from '../scheduler/clock';
+import type { TimelineItem } from '../types';
+
+/** 从 timeline 中提取动作项及其序号 */
+function extractActions(timeline: TimelineItem[]): { index: number; item: TimelineItem & { type: 'action' } }[] {
+  const result: { index: number; item: TimelineItem & { type: 'action' } }[] = [];
+  let idx = 0;
+  for (const item of timeline) {
+    if (item.type === 'action') {
+      result.push({ index: idx, item });
+    }
+    if (item.type === 'action' || item.type === 'rest') {
+      idx++;
+    }
+  }
+  return result;
+}
 
 export const Preview: React.FC = () => {
   const { state, dispatch } = useAppState();
   const compiled = state.compiled!;
   const stats = compiled.stats;
+  const prefs = loadPreferences();
+
+  const [lockedActions, setLockedActions] = useState<Map<number, string>>(new Map());
+  const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
+
+  const actionItems = useMemo(() => extractActions(compiled.timeline), [compiled]);
 
   const handleStart = useCallback(() => {
     dispatch({ type: 'START_PLAYING' });
   }, [dispatch]);
 
   const handleRecompile = useCallback(() => {
+    // 重新编译，保留锁定
+    const totalMs = state.totalDuration * 1000;
+    const newSeq = compileSequence(totalMs, prefs, lockedActions);
+    dispatch({ type: 'COMPILATION_DONE', payload: newSeq });
+  }, [dispatch, state.totalDuration, prefs, lockedActions]);
+
+  const handleReset = useCallback(() => {
     dispatch({ type: 'RESET' });
   }, [dispatch]);
+
+  const toggleLock = useCallback((actionIdx: number, name: string) => {
+    setLockedActions(prev => {
+      const next = new Map(prev);
+      if (next.get(actionIdx) === name) {
+        next.delete(actionIdx);
+      } else {
+        next.set(actionIdx, name);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleReplace = useCallback((actionIdx: number, newName: string) => {
+    setLockedActions(prev => {
+      const next = new Map(prev);
+      next.set(actionIdx, newName);
+      return next;
+    });
+    setExpandedIdx(null);
+  }, []);
+
+  // 可替换的动作池（同速度档位）
+  const allActionNames = [...new Set(
+    [...actionItems.map(a => a.item.name), '从上方和下方捏住并旋转', '隔着内衣用指甲抓挠', '捏住并不断变换力度', '捏住并轻轻向外侧拉', '夹住周围区域', '用指腹温柔摩擦', '用指甲拨动', '按压', '振动手指', '反复碰触', '摩擦周围区域', '摩擦目标区域和周围区域']
+  )];
 
   return (
     <div className="page preview-page">
@@ -48,9 +104,51 @@ export const Preview: React.FC = () => {
         {stats.sprintRounds > 0 && ` → 冲刺 ${stats.sprintRounds} 轮`}
       </div>
 
-      {/* 序列列表 */}
+      {/* 可编辑序列列表 */}
       <div className="sequence-scroll">
-        <SequenceList timeline={compiled.timeline} />
+        {actionItems.map(({ index, item }) => {
+          const isLocked = lockedActions.get(index) === item.name;
+          const isExpanded = expandedIdx === index;
+
+          return (
+            <div key={index} className="edit-action-row">
+              <div className="edit-action-main">
+                <button
+                  className={`lock-btn ${isLocked ? 'locked' : ''}`}
+                  onClick={() => toggleLock(index, item.name)}
+                  title={isLocked ? '已锁定（重新编排不变）' : '点击锁定此动作'}
+                >
+                  {isLocked ? '🔒' : '🔓'}
+                </button>
+                <span className="edit-action-name">{item.name}</span>
+                <span className="edit-action-dur">{Math.round(item.duration / 1000)}s</span>
+                <button
+                  className="edit-expand-btn"
+                  onClick={() => setExpandedIdx(isExpanded ? null : index)}
+                >
+                  {isExpanded ? '▲' : '▼'}
+                </button>
+              </div>
+
+              {isExpanded && (
+                <div className="edit-action-options">
+                  <div className="replace-options">
+                    <span className="replace-label">替换为：</span>
+                    {allActionNames.filter(n => n !== item.name).slice(0, 6).map(name => (
+                      <button
+                        key={name}
+                        className="replace-btn"
+                        onClick={() => handleReplace(index, name)}
+                      >
+                        {name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       {/* 操作按钮 */}
@@ -59,7 +157,10 @@ export const Preview: React.FC = () => {
           开始
         </button>
         <button className="btn btn-recompile" onClick={handleRecompile}>
-          重新编排
+          重新编排（保留锁定）
+        </button>
+        <button className="btn btn-recompile" onClick={handleReset} style={{ flex: 'none', padding: '16px 16px', fontSize: 13 }}>
+          放弃
         </button>
       </div>
     </div>
