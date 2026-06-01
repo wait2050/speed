@@ -6,17 +6,26 @@
   <meta name="theme-color" content="#1a1a2e" />
   <link rel="icon" href="/favicon.ico" />
   <title>节奏按摩引导器</title>
-  <script type="module" crossorigin src="/speed/assets/index-5GQRrDvQ.js"></script>
+  <script type="module" crossorigin src="/speed/assets/index-BWoiGdyh.js"></script>
   <link rel="stylesheet" crossorigin href="/speed/assets/index-DPd4QkAD.css">
-<link rel="manifest" href="/speed/manifest.webmanifest"><script id="vite-plugin-pwa:register-sw" src="/speed/registerSW.js"></script></head>
+</head>
 <body>
   <div id="root">
     <div id="root-fallback" style="display:flex;align-items:center;justify-content:center;height:100vh;background:#1a1a2e;color:#8888aa;font-family:sans-serif;text-align:center;">
       <div>
         <p style="font-size:20px;letter-spacing:4px;margin-bottom:8px;">节奏按摩引导器</p>
         <p style="font-size:13px;">加载中...</p>
+        <p style="font-size:10px;color:rgba(255,255,255,0.1);margin-top:24px;">v2</p>
       </div>
     </div>
   </div>
+  <script>
+    // 清除旧版 Service Worker
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(function(regs) {
+        regs.forEach(function(reg) { reg.unregister(); });
+      });
+    }
+  </script>
 </body>
 </html>

@@ -13,9 +13,18 @@
       <div>
         <p style="font-size:20px;letter-spacing:4px;margin-bottom:8px;">节奏按摩引导器</p>
         <p style="font-size:13px;">加载中...</p>
+        <p style="font-size:10px;color:rgba(255,255,255,0.1);margin-top:24px;">v2</p>
       </div>
     </div>
   </div>
+  <script>
+    // 清除旧版 Service Worker
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(function(regs) {
+        regs.forEach(function(reg) { reg.unregister(); });
+      });
+    }
+  </script>
   <script type="module" src="/src/main.tsx"></script>
 </body>
 </html>

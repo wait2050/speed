@@ -23,6 +23,7 @@ export const Footer: React.FC = () => {
       </div>
       <p className="footer-note">
         页面包含：时长设定 · 编排预览 · 全自动播放 · 静默着陆
+        <br />v2
       </p>
     </footer>
   );
