@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Web Audio 节拍器</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #1a1a2e;
+    color: #eee;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+  .container {
+    background: #16213e;
+    border-radius: 24px;
+    padding: 40px;
+    width: 420px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  }
+  h1 {
+    text-align: center;
+    font-weight: 300;
+    font-size: 22px;
+    letter-spacing: 4px;
+    color: #a0a0c0;
+    margin-bottom: 32px;
+  }
+  .bpm-section { text-align: center; margin-bottom: 28px; }
+  .bpm-display {
+    font-size: 72px;
+    font-weight: 200;
+    line-height: 1;
+    color: #e94560;
+  }
+  .bpm-label { font-size: 14px; color: #8888aa; letter-spacing: 2px; margin-top: 4px; }
+  .bpm-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 4px;
+    border-radius: 2px;
+    background: #2a2a4a;
+    outline: none;
+    margin-top: 16px;
+  }
+  .bpm-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #e94560;
+    cursor: pointer;
+    transition: 0.1s;
+  }
+  .bpm-slider::-webkit-slider-thumb:hover { transform: scale(1.2); }
+  .bpm-slider::-moz-range-thumb {
+    width: 20px; height: 20px; border-radius: 50%;
+    background: #e94560; cursor: pointer; border: none;
+  }
+
+  .controls {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    margin-bottom: 28px;
+  }
+  .btn {
+    padding: 14px 36px;
+    border: none;
+    border-radius: 40px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+    letter-spacing: 1px;
+  }
+  .btn-play {
+    background: #e94560;
+    color: #fff;
+    flex: 1;
+  }
+  .btn-play:hover { background: #ff5a77; }
+  .btn-play.active { background: #555577; }
+  .btn-play.active:hover { background: #666688; }
+  .btn-tap {
+    background: transparent;
+    color: #8888aa;
+    border: 2px solid #3a3a5a;
+    padding: 14px 20px;
+    font-size: 14px;
+  }
+  .btn-tap:hover { border-color: #8888aa; color: #ccc; }
+
+  .sound-select { margin-bottom: 20px; }
+  .sound-select label {
+    display: block;
+    font-size: 12px;
+    color: #8888aa;
+    letter-spacing: 2px;
+    margin-bottom: 8px;
+  }
+  .sound-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 6px;
+  }
+  .sound-option {
+    padding: 10px 8px;
+    border: 1px solid #2a2a4a;
+    border-radius: 10px;
+    background: transparent;
+    color: #8888aa;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.12s;
+    text-align: center;
+  }
+  .sound-option:hover { border-color: #5555aa; color: #ccc; }
+  .sound-option.active {
+    border-color: #e94560;
+    background: rgba(233,69,96,0.1);
+    color: #e94560;
+  }
+
+  .visualizer {
+    height: 6px;
+    border-radius: 3px;
+    background: #2a2a4a;
+    overflow: hidden;
+    margin-top: 8px;
+  }
+  .visualizer-bar {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, #e94560, #ff6b8a);
+    border-radius: 3px;
+    transition: width 0.05s linear;
+  }
+  .visualizer-bar.flash { width: 100%; }
+
+  .footer {
+    text-align: center;
+    font-size: 11px;
+    color: #555577;
+    margin-top: 20px;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>◆ 节 拍 器</h1>
+
+  <div class="bpm-section">
+    <div class="bpm-display" id="bpmDisplay">120</div>
+    <div class="bpm-label">BEATS PER MINUTE</div>
+    <input type="range" class="bpm-slider" id="bpmSlider" min="20" max="280" value="120" step="1">
+  </div>
+
+  <div class="controls">
+    <button class="btn btn-play" id="playBtn">▶ 开始</button>
+    <button class="btn btn-tap" id="tapBtn">👆 拍速</button>
+  </div>
+
+  <div class="sound-select">
+    <label>音 色</label>
+    <div class="sound-grid" id="soundGrid">
+      <button class="sound-option active" data-sound="classic">经典嗒音</button>
+      <button class="sound-option" data-sound="woodfish">木鱼</button>
+      <button class="sound-option" data-sound="heartbeat">心跳</button>
+      <button class="sound-option" data-sound="waterdrop">水滴</button>
+      <button class="sound-option" data-sound="tap">指尖敲击</button>
+      <button class="sound-option" data-sound="kick">低音鼓点</button>
+    </div>
+  </div>
+
+  <div class="visualizer">
+    <div class="visualizer-bar" id="visBar"></div>
+  </div>
+
+  <div class="footer">Web Audio API · 零外部文件 · 实时合成</div>
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  // --- DOM refs ---
+  const bpmDisplay    = document.getElementById('bpmDisplay');
+  const bpmSlider     = document.getElementById('bpmSlider');
+  const playBtn       = document.getElementById('playBtn');
+  const tapBtn        = document.getElementById('tapBtn');
+  const visBar        = document.getElementById('visBar');
+  const soundOptions  = document.querySelectorAll('.sound-option');
+
+  // --- State ---
+  let audioCtx = null;
+  let isPlaying = false;
+  let nextTickTime = 0;
+  let timerId = null;
+  let currentBpm = 120;
+  let currentSound = 'classic';
+  let beatCount = 0;
+
+  // Tap-tempo state
+  let tapTimes = [];
+
+  // --- Audio synthesis ---
+
+  function ensureAudioCtx() {
+    if (!audioCtx) {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if (audioCtx.state === 'suspended') {
+      audioCtx.resume();
+    }
+    return audioCtx;
+  }
+
+  /**
+   * Play a single tick with the given sound type.
+   * All sounds are synthesized in real-time with Web Audio API — zero audio files.
+   */
+  function playTick(type) {
+    const ctx = ensureAudioCtx();
+    const now = ctx.currentTime;
+
+    switch (type) {
+      case 'classic': {
+        // 经典嗒音: 800Hz 正弦波, 50ms, 快速衰减
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = 800;
+        gain.gain.setValueAtTime(0.3, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.05);
+        break;
+      }
+
+      case 'woodfish': {
+        // 木鱼: 基频 400Hz + 谐波 1200Hz, 80ms
+        const o1 = ctx.createOscillator();
+        const g1 = ctx.createGain();
+        o1.type = 'sine';
+        o1.frequency.value = 400;
+        g1.gain.setValueAtTime(0.5, now);
+        g1.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+        o1.connect(g1);
+        g1.connect(ctx.destination);
+        o1.start(now);
+        o1.stop(now + 0.08);
+
+        const o2 = ctx.createOscillator();
+        const g2 = ctx.createGain();
+        o2.type = 'sine';
+        o2.frequency.value = 1200;
+        g2.gain.setValueAtTime(0.15, now);
+        g2.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+        o2.connect(g2);
+        g2.connect(ctx.destination);
+        o2.start(now);
+        o2.stop(now + 0.06);
+        break;
+      }
+
+      case 'heartbeat': {
+        // 心跳: 60Hz, 双脉冲间隔 100ms, 模拟 "咚-咚"
+        for (let i = 0; i < 2; i++) {
+          const o = ctx.createOscillator();
+          const g = ctx.createGain();
+          o.type = 'sine';
+          o.frequency.value = 60;
+          const t = now + i * 0.1;
+          g.gain.setValueAtTime(0.6, t);
+          g.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+          o.connect(g);
+          g.connect(ctx.destination);
+          o.start(t);
+          o.stop(t + 0.15);
+        }
+        break;
+      }
+
+      case 'waterdrop': {
+        // 水滴: 1200Hz 正弦, 快速指数衰减, 150ms
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = 1200;
+        gain.gain.setValueAtTime(0.4, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.15);
+        break;
+      }
+
+      case 'tap': {
+        // 指尖敲击: 白噪声 + 带通滤波器 2000Hz, 30ms
+        const bufferSize = Math.floor(ctx.sampleRate * 0.03);
+        const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+          data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.1));
+        }
+        const noise = ctx.createBufferSource();
+        noise.buffer = buffer;
+        const filter = ctx.createBiquadFilter();
+        filter.type = 'bandpass';
+        filter.frequency.value = 2000;
+        filter.Q.value = 1.0;
+        const noiseGain = ctx.createGain();
+        noiseGain.gain.setValueAtTime(0.15, now);
+        noise.connect(filter);
+        filter.connect(noiseGain);
+        noiseGain.connect(ctx.destination);
+        noise.start(now);
+        break;
+      }
+
+      case 'kick': {
+        // 低音鼓点: 150Hz → 40Hz 频率下滑, 250ms
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(150, now);
+        osc.frequency.exponentialRampToValueAtTime(40, now + 0.2);
+        gain.gain.setValueAtTime(0.8, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.25);
+        break;
+      }
+    }
+  }
+
+  // --- Visual flash ---
+  function flashVisual() {
+    visBar.classList.add('flash');
+    // Force reflow for rapid beats
+    void visBar.offsetWidth;
+    visBar.classList.remove('flash');
+  }
+
+  // --- Scheduling (look-ahead) ---
+  function scheduleTick() {
+    if (!isPlaying) return;
+
+    const interval = 60.0 / currentBpm;
+
+    // Schedule all ticks that fall within the look-ahead window (200ms)
+    while (nextTickTime < audioCtx.currentTime + 0.2) {
+      const delay = nextTickTime - audioCtx.currentTime;
+
+      // Flash visually (slightly ahead for responsiveness)
+      if (delay < 0.05) {
+        flashVisual();
+      } else {
+        setTimeout(() => flashVisual(), delay * 1000);
+      }
+
+      // Play the sound at the exact scheduled time
+      const scheduledTime = nextTickTime;
+      // We schedule by creating an oscillator that starts at the right time
+      // But since playTick uses ctx.currentTime internally, we need a variant
+      // that accepts a time offset.
+      scheduleSound(currentSound, scheduledTime);
+
+      nextTickTime += interval;
+    }
+
+    timerId = setTimeout(scheduleTick, 25);
+  }
+
+  /**
+   * Schedule a sound to play at a specific absolute audio context time.
+   * Each branch mirrors playTick but uses the passed `time` instead of ctx.currentTime.
+   */
+  function scheduleSound(type, time) {
+    const ctx = ensureAudioCtx();
+
+    switch (type) {
+      case 'classic': {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = 800;
+        gain.gain.setValueAtTime(0.3, time);
+        gain.gain.exponentialRampToValueAtTime(0.001, time + 0.05);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(time);
+        osc.stop(time + 0.05);
+        break;
+      }
+
+      case 'woodfish': {
+        const o1 = ctx.createOscillator();
+        const g1 = ctx.createGain();
+        o1.type = 'sine';
+        o1.frequency.value = 400;
+        g1.gain.setValueAtTime(0.5, time);
+        g1.gain.exponentialRampToValueAtTime(0.001, time + 0.08);
+        o1.connect(g1);
+        g1.connect(ctx.destination);
+        o1.start(time);
+        o1.stop(time + 0.08);
+
+        const o2 = ctx.createOscillator();
+        const g2 = ctx.createGain();
+        o2.type = 'sine';
+        o2.frequency.value = 1200;
+        g2.gain.setValueAtTime(0.15, time);
+        g2.gain.exponentialRampToValueAtTime(0.001, time + 0.06);
+        o2.connect(g2);
+        g2.connect(ctx.destination);
+        o2.start(time);
+        o2.stop(time + 0.06);
+        break;
+      }
+
+      case 'heartbeat': {
+        for (let i = 0; i < 2; i++) {
+          const o = ctx.createOscillator();
+          const g = ctx.createGain();
+          o.type = 'sine';
+          o.frequency.value = 60;
+          const t = time + i * 0.1;
+          g.gain.setValueAtTime(0.6, t);
+          g.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+          o.connect(g);
+          g.connect(ctx.destination);
+          o.start(t);
+          o.stop(t + 0.15);
+        }
+        break;
+      }
+
+      case 'waterdrop': {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = 1200;
+        gain.gain.setValueAtTime(0.4, time);
+        gain.gain.exponentialRampToValueAtTime(0.001, time + 0.15);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(time);
+        osc.stop(time + 0.15);
+        break;
+      }
+
+      case 'tap': {
+        const bufferSize = Math.floor(ctx.sampleRate * 0.03);
+        const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+          data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.1));
+        }
+        const noise = ctx.createBufferSource();
+        noise.buffer = buffer;
+        const filter = ctx.createBiquadFilter();
+        filter.type = 'bandpass';
+        filter.frequency.value = 2000;
+        filter.Q.value = 1.0;
+        const noiseGain = ctx.createGain();
+        noiseGain.gain.setValueAtTime(0.15, time);
+        noise.connect(filter);
+        filter.connect(noiseGain);
+        noiseGain.connect(ctx.destination);
+        noise.start(time);
+        break;
+      }
+
+      case 'kick': {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(150, time);
+        osc.frequency.exponentialRampToValueAtTime(40, time + 0.2);
+        gain.gain.setValueAtTime(0.8, time);
+        gain.gain.exponentialRampToValueAtTime(0.001, time + 0.25);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(time);
+        osc.stop(time + 0.25);
+        break;
+      }
+    }
+  }
+
+  // --- Play / Stop ---
+  function startMetronome() {
+    if (isPlaying) return;
+    const ctx = ensureAudioCtx();
+    isPlaying = true;
+    nextTickTime = ctx.currentTime + 0.05; // tiny offset for first tick
+    playBtn.textContent = '■ 停止';
+    playBtn.classList.add('active');
+    scheduleTick();
+  }
+
+  function stopMetronome() {
+    if (!isPlaying) return;
+    isPlaying = false;
+    if (timerId) {
+      clearTimeout(timerId);
+      timerId = null;
+    }
+    playBtn.textContent = '▶ 开始';
+    playBtn.classList.remove('active');
+    visBar.classList.remove('flash');
+  }
+
+  function togglePlay() {
+    if (isPlaying) {
+      stopMetronome();
+    } else {
+      startMetronome();
+    }
+  }
+
+  // --- BPM ---
+  function updateBpm(val) {
+    currentBpm = Math.round(parseFloat(val));
+    bpmDisplay.textContent = currentBpm;
+    bpmSlider.value = currentBpm;
+  }
+
+  bpmSlider.addEventListener('input', function() {
+    updateBpm(this.value);
+  });
+
+  // Keyboard shortcuts: arrow keys adjust BPM
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'ArrowUp' || e.key === 'ArrowRight') {
+      if (currentBpm < 280) updateBpm(currentBpm + 1);
+      e.preventDefault();
+    } else if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') {
+      if (currentBpm > 20) updateBpm(currentBpm - 1);
+      e.preventDefault();
+    } else if (e.key === ' ' || e.key === 'Space') {
+      e.preventDefault();
+      togglePlay();
+    }
+  });
+
+  // --- Tap tempo ---
+  tapBtn.addEventListener('click', function() {
+    const now = performance.now();
+    tapTimes.push(now);
+
+    // Keep only last 5 taps within 3 seconds
+    while (tapTimes.length > 0 && now - tapTimes[0] > 3000) {
+      tapTimes.shift();
+    }
+
+    if (tapTimes.length >= 4) {
+      // Calculate average interval
+      let total = 0;
+      for (let i = 1; i < tapTimes.length; i++) {
+        total += tapTimes[i] - tapTimes[i - 1];
+      }
+      const avg = total / (tapTimes.length - 1);
+      const bpm = Math.round(60000 / avg);
+      if (bpm >= 20 && bpm <= 280) {
+        updateBpm(bpm);
+      }
+      tapTimes = [tapTimes[tapTimes.length - 1]]; // reset, keep last
+    }
+  });
+
+  // --- Sound selection ---
+  soundOptions.forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      soundOptions.forEach(b => b.classList.remove('active'));
+      this.classList.add('active');
+      currentSound = this.dataset.sound;
+      // Preview: play a single tick when changing sound (if not playing)
+      if (!isPlaying) {
+        try {
+          playTick(currentSound);
+        } catch(e) {}
+      }
+    });
+  });
+
+  // --- Play button ---
+  playBtn.addEventListener('click', togglePlay);
+
+  // --- Init ---
+  updateBpm(120);
+
+})();
+</script>
+</body>
+</html>
