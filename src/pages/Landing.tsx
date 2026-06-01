@@ -2,14 +2,14 @@
 // Landing — 静默着陆页：呼吸灯 + 评分
 // ============================================================
 import React, { useState, useCallback, useEffect } from 'react';
-import { useAppState } from '../state/context';
+import { useAppStore } from '../state/store';
 import { BreathingLight } from '../components/BreathingLight';
 import { saveHistory, saveFavorite, loadPreferences } from '../storage';
 import { buildExportData, downloadExport } from '../storage/export';
 import type { HistoryEntry } from '../types';
 
 export const Landing: React.FC = () => {
-  const { state, dispatch } = useAppState();
+  const { compiled, totalDuration, reset } = useAppStore();
   const [rating, setRating] = useState<number | null>(null);
   const [showFavorite, setShowFavorite] = useState(false);
   const [favLabel, setFavLabel] = useState('');
@@ -32,35 +32,35 @@ export const Landing: React.FC = () => {
   const handleRate = useCallback((r: number) => {
     setRating(r);
 
-    if (state.compiled) {
+    if (compiled) {
       const entry: HistoryEntry = {
         id: `h_${Date.now()}`,
         timestamp: Date.now(),
-        totalDuration: state.totalDuration,
-        stats: state.compiled.stats,
+        totalDuration: totalDuration,
+        stats: compiled.stats,
         rating: r,
-        sequence: state.compiled,
+        sequence: compiled,
       };
       saveHistory(entry);
     }
 
     setShowFavorite(true);
-  }, [state.compiled, state.totalDuration]);
+  }, [compiled, totalDuration]);
 
   const handleFavorite = useCallback(() => {
-    if (state.compiled && favLabel.trim()) {
-      saveFavorite(state.compiled, favLabel.trim());
+    if (compiled && favLabel.trim()) {
+      saveFavorite(compiled, favLabel.trim());
     }
     setPhase('done');
-  }, [state.compiled, favLabel]);
+  }, [compiled, favLabel]);
 
   const handleSkipFavorite = useCallback(() => {
     setPhase('done');
   }, []);
 
   const handleReset = useCallback(() => {
-    dispatch({ type: 'RESET' });
-  }, [dispatch]);
+    reset();
+  }, [reset]);
 
   return (
     <div className="page landing-page">
@@ -122,13 +122,13 @@ export const Landing: React.FC = () => {
             className="btn btn-save"
             style={{ marginTop: 8 }}
             onClick={() => {
-              if (!state.compiled) return;
+              if (!compiled) return;
               const data = buildExportData(
-                state.totalDuration,
+                totalDuration,
                 ['warmup','core','sprint','climax','afterglow','cooldown'],
                 [],
                 3, 1,
-                state.compiled,
+                compiled,
               );
               downloadExport(data);
             }}

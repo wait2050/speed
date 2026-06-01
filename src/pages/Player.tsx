@@ -2,7 +2,7 @@
 // Player — 极简播放页：引擎驱动 UI，零闭包问题
 // ============================================================
 import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
-import { useAppState } from '../state/context';
+import { useAppStore } from '../state/store';
 import { Timer } from '../components/Timer';
 import { ProgressBar } from '../components/ProgressBar';
 import { PlaybackEngine } from '../engine/PlaybackEngine';
@@ -19,8 +19,7 @@ const PHASE_LABELS: Record<Phase, string> = {
 };
 
 export const Player: React.FC = () => {
-  const { state, dispatch } = useAppState();
-  const compiled = state.compiled;
+  const { compiled, reset } = useAppStore();
   const engineRef = useRef<PlaybackEngine | null>(null);
 
   // 显示状态（引擎单向推送）
@@ -32,7 +31,7 @@ export const Player: React.FC = () => {
   // 启动
   useEffect(() => {
     if (!compiled?.timeline?.length) {
-      dispatch({ type: 'RESET' });
+      reset();
       return;
     }
 
@@ -45,7 +44,7 @@ export const Player: React.FC = () => {
     });
 
     return () => { engine.destroy(); engineRef.current = null; };
-  }, [compiled, dispatch]);
+  }, [compiled]);
 
   // 暂停
   useEffect(() => {
@@ -82,9 +81,9 @@ export const Player: React.FC = () => {
 
   const handleStop = useCallback(() => {
     engineRef.current?.destroy();
-    dispatch({ type: 'RESET' });
+    reset();
     clearProgress();
-  }, [dispatch]);
+  }, [reset]);
 
   const segments: PhaseSegment[] = useMemo(
     () => compiled ? computePhaseSegments(compiled.timeline) : [],

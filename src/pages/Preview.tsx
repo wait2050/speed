@@ -2,7 +2,7 @@
 // Preview — 编排预览：统计 + 可编辑序列 + 开始按钮
 // ============================================================
 import React, { useMemo, useCallback, useState } from 'react';
-import { useAppState } from '../state/context';
+import { useAppStore } from '../state/store';
 import { compileSequence } from '../compiler/compiler';
 import { loadPreferences } from '../storage';
 import { formatMs } from '../utils/time';
@@ -25,8 +25,8 @@ function extractItems(timeline: TimelineItem[]): { index: number; item: PreviewI
 }
 
 export const Preview: React.FC = () => {
-  const { state, dispatch } = useAppState();
-  const compiled = state.compiled!;
+  const { compiled: _compiled, totalDuration, startPlaying, compilationDone, reset } = useAppStore();
+  const compiled = _compiled!;
   const stats = compiled.stats;
   const prefs = loadPreferences();
 
@@ -36,19 +36,19 @@ export const Preview: React.FC = () => {
   const timelineItems = useMemo(() => extractItems(compiled.timeline), [compiled]);
 
   const handleStart = useCallback(() => {
-    dispatch({ type: 'START_PLAYING' });
-  }, [dispatch]);
+    startPlaying();
+  }, [startPlaying]);
 
   const handleRecompile = useCallback(() => {
     // 重新编译，保留锁定
-    const totalMs = state.totalDuration * 1000;
+    const totalMs = totalDuration * 1000;
     const newSeq = compileSequence(totalMs, prefs, lockedActions);
-    dispatch({ type: 'COMPILATION_DONE', payload: newSeq });
-  }, [dispatch, state.totalDuration, prefs, lockedActions]);
+    compilationDone(newSeq);
+  }, [compilationDone, totalDuration, prefs, lockedActions]);
 
   const handleReset = useCallback(() => {
-    dispatch({ type: 'RESET' });
-  }, [dispatch]);
+    reset();
+  }, [reset]);
 
   const toggleLock = useCallback((actionIdx: number, name: string) => {
     setLockedActions(prev => {

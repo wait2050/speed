@@ -2,7 +2,7 @@
 // App — 状态驱动页面路由 + 侧边栏
 // ============================================================
 import React, { useState, useCallback } from 'react';
-import { useAppState, AppProvider } from './state/context';
+import { useAppStore } from './state/store';
 import { Home } from './pages/Home';
 import { Preview } from './pages/Preview';
 import { Player } from './pages/Player';
@@ -14,7 +14,7 @@ import type { CompiledSequence } from './types';
 import './index.css';
 
 const AppInner: React.FC = () => {
-  const { state, dispatch } = useAppState();
+  const { status, compiled, compilationDone, startPlaying } = useAppStore();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // 检测未完成编排
@@ -22,15 +22,12 @@ const AppInner: React.FC = () => {
     const timer = setTimeout(() => {
       try {
         const saved = loadProgress();
-        if (saved && state.status === 'IDLE') {
+        if (saved && status === 'IDLE') {
           const resume = window.confirm('检测到上次未完成的播放，是否继续？');
           if (resume) {
             audioEngine.init().then(() => {
-              dispatch({
-                type: 'COMPILATION_DONE',
-                payload: { timeline: saved.timeline, stats: { totalDuration: 0, totalActionDuration: 0, totalRestDuration: 0, rounds: 0, warmupRounds: 0, coreRounds: 0, sprintRounds: 0 } },
-              });
-              dispatch({ type: 'START_PLAYING' });
+              compilationDone({ timeline: saved.timeline, stats: { totalDuration: 0, totalActionDuration: 0, totalRestDuration: 0, rounds: 0, warmupRounds: 0, coreRounds: 0, sprintRounds: 0 } });
+              startPlaying();
             }).catch(() => {});
           }
         }
@@ -41,13 +38,13 @@ const AppInner: React.FC = () => {
 
   // 从侧边栏加载编排
   const handleLoadSequence = useCallback((seq: CompiledSequence) => {
-    dispatch({ type: 'COMPILATION_DONE', payload: seq });
-  }, [dispatch]);
+    compilationDone(seq);
+  }, [compilationDone]);
 
-  const showHamburger = state.status === 'IDLE' || state.status === 'READY' || state.status === 'FINISHED';
+  const showHamburger = status === 'IDLE' || status === 'READY' || status === 'FINISHED';
 
   const page = (() => {
-    switch (state.status) {
+    switch (status) {
       case 'IDLE': return <Home />;
       case 'COMPILING':
         return (
@@ -83,12 +80,6 @@ const AppInner: React.FC = () => {
   );
 };
 
-const App: React.FC = () => {
-  return (
-    <AppProvider>
-      <AppInner />
-    </AppProvider>
-  );
-};
+const App: React.FC = () => <AppInner />;
 
 export default App;

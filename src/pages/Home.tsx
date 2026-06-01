@@ -2,7 +2,7 @@
 // Home — 主页：总时长设定 + 生成编排
 // ============================================================
 import React, { useState, useCallback } from 'react';
-import { useAppState } from '../state/context';
+import { useAppStore } from '../state/store';
 import { compileSequence } from '../compiler/compiler';
 import { loadPreferences, savePreferences } from '../storage';
 import { audioEngine } from '../audio/engine';
@@ -27,7 +27,7 @@ const SOUNDS: { id: SoundType; label: string }[] = [
 ];
 
 export const Home: React.FC = () => {
-  const { state, dispatch } = useAppState();
+  const { startCompiling: dispatchStartCompiling, compilationDone } = useAppStore();
   const [prefs, setPrefs] = useState(() => loadPreferences());
   const [showSettings, setShowSettings] = useState(false);
   const [enabledPhases, setEnabledPhases] = useState<Set<PhaseOption>>(
@@ -72,15 +72,15 @@ export const Home: React.FC = () => {
     // 首次用户交互时初始化音频引擎
     await audioEngine.init();
 
-    dispatch({ type: 'START_COMPILING' });
+    dispatchStartCompiling();
 
     // 编译器是纯函数，但用 setTimeout 避免阻塞 UI
     setTimeout(() => {
       const totalMs = prefs.defaultDuration * 1000;
       const compiled = compileSequence(totalMs, prefs, undefined, { enabled: enabledPhases }, enabledActions, climaxMin, afterglowMin, snapCounts);
-      dispatch({ type: 'COMPILATION_DONE', payload: compiled });
+      compilationDone(compiled);
     }, 50);
-  }, [dispatch, prefs, enabledPhases, enabledActions, climaxMin, afterglowMin, snapCounts]);
+  }, [dispatchStartCompiling, compilationDone, prefs, enabledPhases, enabledActions, climaxMin, afterglowMin, snapCounts]);
 
   const handleDurationChange = useCallback((val: number) => {
     const newPrefs = { ...prefs, defaultDuration: val };
