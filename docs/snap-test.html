@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>打响指测试</title>
+<style>
+  body { background: #1a1a2e; color: #eee; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; gap: 20px; }
+  button { padding: 16px 32px; font-size: 18px; border: none; border-radius: 12px; cursor: pointer; }
+  .snap { background: #e94560; color: #fff; }
+  .beat { background: #333; color: #aaa; }
+</style>
+</head>
+<body>
+<h2>打响指音效测试</h2>
+<button class="snap" id="btnSnap">👆 打响指</button>
+<button class="beat" id="btnBeat">🥁 节拍对比</button>
+<p id="log" style="font-size:12px;color:#666"></p>
+
+<script>
+const log = (s) => { document.getElementById('log').textContent = s; console.log(s); };
+
+let ctx = null;
+let snapBuf = null;
+
+function init() {
+  if (ctx) return;
+  ctx = new AudioContext({ sampleRate: 44100 });
+  
+  // 合成打响指
+  const sr = 44100;
+  const len = Math.ceil(0.04 * sr);
+  snapBuf = new AudioBuffer({ length: len, sampleRate: sr });
+  const ch = snapBuf.getChannelData(0);
+  for (let i = 0; i < len; i++) {
+    const t = i / sr;
+    const attack = Math.min(1, t / 0.001);
+    const decay = Math.exp(-t / 0.006);
+    ch[i] = (Math.random() * 2 - 1) * 0.8 * attack * decay;
+  }
+  log('AudioContext 已初始化，sampleRate=' + sr);
+}
+
+function playSnap() {
+  init();
+  if (ctx.state === 'suspended') ctx.resume();
+  const src = ctx.createBufferSource();
+  src.buffer = snapBuf;
+  const hp = ctx.createBiquadFilter();
+  hp.type = 'highpass';
+  hp.frequency.value = 1500;
+  const bp = ctx.createBiquadFilter();
+  bp.type = 'bandpass';
+  bp.frequency.value = 4000;
+  bp.Q.value = 2;
+  const gain = ctx.createGain();
+  gain.gain.value = 1.0;
+  src.connect(hp);
+  hp.connect(bp);
+  bp.connect(gain);
+  gain.connect(ctx.destination);
+  src.start(ctx.currentTime + 0.01);
+  log('已播放打响指 ' + new Date().toLocaleTimeString());
+}
+
+function playBeat() {
+  init();
+  if (ctx.state === 'suspended') ctx.resume();
+  const osc = ctx.createOscillator();
+  osc.type = 'sine';
+  osc.frequency.value = 800;
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(0.3, ctx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.05);
+  osc.connect(gain).connect(ctx.destination);
+  osc.start(ctx.currentTime);
+  osc.stop(ctx.currentTime + 0.05);
+  log('已播放节拍对比音');
+}
+
+document.getElementById('btnSnap').onclick = playSnap;
+document.getElementById('btnBeat').onclick = playBeat;
+</script>
+</body>
+</html>
