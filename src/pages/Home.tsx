@@ -30,7 +30,6 @@ export const Home: React.FC = () => {
   const { state, dispatch } = useAppState();
   const [prefs, setPrefs] = useState(() => loadPreferences());
   const [showSettings, setShowSettings] = useState(false);
-  const [audioReady, setAudioReady] = useState(false);
   const [enabledPhases, setEnabledPhases] = useState<Set<PhaseOption>>(
     () => new Set<PhaseOption>(['warmup', 'core', 'sprint', 'climax', 'afterglow', 'cooldown'])
   );
@@ -69,17 +68,9 @@ export const Home: React.FC = () => {
     });
   }, []);
 
-  const handleInitAudio = useCallback(async () => {
-    await audioEngine.init();
-    setAudioReady(true);
-  }, []);
-
   const handleCompile = useCallback(async () => {
-    // 确保音频引擎初始化
-    if (!audioReady) {
-      await audioEngine.init();
-      setAudioReady(true);
-    }
+    // 首次用户交互时初始化音频引擎
+    await audioEngine.init();
 
     dispatch({ type: 'START_COMPILING' });
 
@@ -89,7 +80,7 @@ export const Home: React.FC = () => {
       const compiled = compileSequence(totalMs, prefs, undefined, { enabled: enabledPhases }, enabledActions, climaxMin, afterglowMin, snapCounts);
       dispatch({ type: 'COMPILATION_DONE', payload: compiled });
     }, 50);
-  }, [dispatch, prefs, audioReady, enabledPhases, enabledActions, climaxMin, afterglowMin, snapCounts]);
+  }, [dispatch, prefs, enabledPhases, enabledActions, climaxMin, afterglowMin, snapCounts]);
 
   const handleDurationChange = useCallback((val: number) => {
     const newPrefs = { ...prefs, defaultDuration: val };
@@ -114,22 +105,14 @@ export const Home: React.FC = () => {
     setPrefs(newPrefs);
     savePreferences(newPrefs);
     // 试听
-    if (audioReady) {
-      audioEngine.previewBeat(sound);
-    }
-  }, [prefs, audioReady]);
+    audioEngine.init().then(() => audioEngine.previewBeat(sound));
+  }, [prefs]);
 
   const presets = [10, 15, 20, 25, 30, 40, 50, 60];
 
   return (
     <div className="page home-page">
       <h1 className="app-title">节奏按摩引导器</h1>
-
-      {!audioReady && (
-        <button className="btn btn-init" onClick={handleInitAudio}>
-          点此初始化音频引擎
-        </button>
-      )}
 
       {/* 时长设定 */}
       <section className="duration-section">
@@ -250,7 +233,7 @@ export const Home: React.FC = () => {
       </section>
 
       {/* 生成按钮 */}
-      <button className="btn btn-compile" onClick={handleCompile} disabled={!audioReady}>
+      <button className="btn btn-compile" onClick={handleCompile}>
         生成编排
       </button>
 
