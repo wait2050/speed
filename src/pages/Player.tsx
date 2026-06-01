@@ -7,7 +7,6 @@ import { Timer } from '../components/Timer';
 import { PlaybackScheduler } from '../scheduler/scheduler';
 import { audioEngine } from '../audio/engine';
 import { useWakeLock } from '../hooks/useWakeLock';
-import { useFullscreen } from '../hooks/useFullscreen';
 import { lockTouch } from '../utils/preventTouch';
 import { saveProgress, clearProgress } from '../storage';
 import type { Phase } from '../types';
@@ -46,9 +45,8 @@ export const Player: React.FC = () => {
 
   const compiled = state.compiled;
 
-  // 屏幕常亮 + 全屏
+  // 屏幕常亮（全屏已移除）
   useWakeLock(true);
-  useFullscreen(true);
 
   // 防误触
   useEffect(() => {
@@ -66,6 +64,9 @@ export const Player: React.FC = () => {
     }
 
     console.log('[Player] starting scheduler, timeline length:', compiled.timeline.length);
+
+    // 移动端 AudioContext 可能被挂起，先恢复
+    audioEngine.resume().catch(() => {});
 
     try {
       const scheduler = new PlaybackScheduler(
