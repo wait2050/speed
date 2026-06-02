@@ -43,9 +43,9 @@ export function compileSequence(
   // 过滤动作池
   const filterPool = <T extends { name: string }>(pool: T[]): T[] =>
     enabledActions ? pool.filter(a => enabledActions.has(a.name)) : pool;
-  const pickBasicFiltered = () => {
-    const pool = filterPool([...ACTION_POOLS.basic]);
-    return pool[Math.floor(Math.random() * pool.length)] || ACTION_POOLS.basic[0];
+  const pickWarmupFiltered = () => {
+    const pool = filterPool([...ACTION_POOLS.warmup]);
+    return pool[Math.floor(Math.random() * pool.length)] || ACTION_POOLS.warmup[0];
   };
   const pickTopFiltered = () => {
     const pool = filterPool([...ACTION_POOLS.top]);
@@ -124,7 +124,7 @@ export function compileSequence(
   if (has('warmup') && warmupBudget > 0) {
     let filled = 0;
     while (filled < warmupBudget) {
-      const action = pickForStage(pickBasicFiltered);
+      const action = pickForStage(pickWarmupFiltered);
       const bpm = prefs.customBpm.slow;
       const dur = randInRange(WARMUP_ACTION_MIN, WARMUP_ACTION_MAX);
       timeline.push(makeAction(action.name, dur, bpm, prefs.customSounds.slow, WARMUP_VOLUME, 'warmup'));

@@ -111,10 +111,10 @@ export const Player: React.FC = () => {
 
   const handleClimaxOrAfterglow = useCallback(() => {
     if (ds.phase !== 'climax') {
-      engineRef.current?.triggerSubjectiveClimax('从上方和下方捏住并旋转');
+      engineRef.current?.triggerSubjectiveClimax('捏住并旋转');
       setSubjectiveClimax(true);
     } else {
-      engineRef.current?.triggerReleaseAfterglow('捏住并不断变换力度');
+      engineRef.current?.triggerReleaseAfterglow('提拉然后松手');
       setSubjectiveClimax(false);
     }
   }, [ds.phase, setSubjectiveClimax]);
@@ -159,10 +159,10 @@ export const Player: React.FC = () => {
         exciteTimerRef.current = setTimeout(() => setIsExcited(false), 800);
       } else if (e.key === 'ArrowRight' && ds.phase !== 'warmup') {
         if (ds.phase !== 'climax') {
-          engineRef.current?.triggerSubjectiveClimax('从上方和下方捏住并旋转');
+          engineRef.current?.triggerSubjectiveClimax('捏住并旋转');
           setSubjectiveClimax(true);
         } else {
-          engineRef.current?.triggerReleaseAfterglow('捏住并不断变换力度');
+          engineRef.current?.triggerReleaseAfterglow('提拉然后松手');
           setSubjectiveClimax(false);
         }
       }

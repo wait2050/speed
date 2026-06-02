@@ -1,19 +1,19 @@
 // ============================================================
-// 动作池定义
+// 动作池定义（精简版 · 7 个动作）
 // ============================================================
 import type { ActionDef } from '../types';
 
 // --- 快感最强（可直接达到高潮） ---
 const TOP_ACTIONS: ActionDef[] = [
   {
-    name: '从上方和下方捏住并旋转',
+    name: '捏住并旋转',
     intensity: 1,
     speedTier: 'slow',
     baseDuration: 60,
     floatRange: 10,
   },
   {
-    name: '隔着内衣用指甲抓挠',
+    name: '提拉然后松手',
     intensity: 1,
     speedTier: 'fast',
     baseDuration: 45,
@@ -24,21 +24,14 @@ const TOP_ACTIONS: ActionDef[] = [
 // --- 快感次强 ---
 const STRONG_ACTIONS: ActionDef[] = [
   {
-    name: '捏住并不断变换力度',
-    intensity: 2,
-    speedTier: 'slow',
-    baseDuration: 60,
-    floatRange: 10,
-  },
-  {
-    name: '捏住并轻轻向外侧拉',
+    name: '上下刮擦',
     intensity: 2,
     speedTier: 'slow',
     baseDuration: 55,
     floatRange: 10,
   },
   {
-    name: '夹住周围区域',
+    name: '左右捏住然后松开',
     intensity: 2,
     speedTier: 'slow',
     baseDuration: 50,
@@ -49,53 +42,43 @@ const STRONG_ACTIONS: ActionDef[] = [
 // --- 基础动作 ---
 const BASIC_ACTIONS: ActionDef[] = [
   {
-    name: '用指腹温柔摩擦',
+    name: '指腹摩擦',
     intensity: 3,
     speedTier: 'slow',
     baseDuration: 50,
     floatRange: 10,
   },
   {
-    name: '用指甲拨动',
+    name: '周围区域摩擦',
     intensity: 3,
     speedTier: 'slow',
     baseDuration: 50,
-    floatRange: 5,
-  },
-  {
-    name: '按压',
-    intensity: 3,
-    speedTier: 'slow',
-    baseDuration: 60,
     floatRange: 10,
   },
   {
-    name: '振动手指',
-    intensity: 3,
-    speedTier: 'fast',
-    baseDuration: 40,
-    floatRange: 5,
-  },
-  {
-    name: '反复碰触',
+    name: '反复点按',
     intensity: 3,
     speedTier: 'fast',
     baseDuration: 35,
     floatRange: 5,
   },
+];
+
+// --- 热身专用（仅周围区域摩擦 + 反复点按） ---
+const WARMUP_ACTIONS: ActionDef[] = [
   {
-    name: '摩擦周围区域',
+    name: '周围区域摩擦',
     intensity: 3,
     speedTier: 'slow',
     baseDuration: 50,
     floatRange: 10,
   },
   {
-    name: '摩擦目标区域和周围区域',
+    name: '反复点按',
     intensity: 3,
-    speedTier: 'slow',
-    baseDuration: 50,
-    floatRange: 10,
+    speedTier: 'fast',
+    baseDuration: 35,
+    floatRange: 5,
   },
 ];
 
@@ -109,10 +92,10 @@ export const ACTION_POOLS = {
   top: TOP_ACTIONS,
   strong: STRONG_ACTIONS,
   basic: BASIC_ACTIONS,
-  warmup: BASIC_ACTIONS,          // 热身仅基础动作
-  core: ALL_ACTIONS,               // 核心全部动作
-  sprint: [...TOP_ACTIONS],        // 冲刺优先最强
-  climax: TOP_ACTIONS,             // 高潮固定最强
+  warmup: WARMUP_ACTIONS,         // 热身仅周围区域摩擦+反复点按
+  core: ALL_ACTIONS,              // 核心全部动作
+  sprint: [...TOP_ACTIONS],       // 冲刺优先最强
+  climax: TOP_ACTIONS,            // 高潮固定最强
 } as const;
 
 // --- 编排抽取权重 ---
@@ -142,7 +125,7 @@ export function pickTop(): ActionDef {
   return TOP_ACTIONS[Math.floor(Math.random() * TOP_ACTIONS.length)];
 }
 
-// 热身阶段：从基础动作随机
+// 热身阶段：仅周围区域摩擦+反复点按
 export function pickBasic(): ActionDef {
-  return BASIC_ACTIONS[Math.floor(Math.random() * BASIC_ACTIONS.length)];
+  return WARMUP_ACTIONS[Math.floor(Math.random() * WARMUP_ACTIONS.length)];
 }
