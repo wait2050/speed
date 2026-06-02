@@ -19,7 +19,7 @@ const PHASE_LABELS: Record<Phase, string> = {
 };
 
 export const Player: React.FC = () => {
-  const { compiled, reset, subjectiveClimaxTriggered, setSubjectiveClimax } = useAppStore();
+  const { compiled, reset, subjectiveClimaxTriggered, setSubjectiveClimax, playbackFinished } = useAppStore();
   const engineRef = useRef<PlaybackEngine | null>(null);
 
   // 显示状态（引擎单向推送）
@@ -40,11 +40,12 @@ export const Player: React.FC = () => {
 
     engine.init().then(() => {
       engine.setOnUpdate(setDs);
+      engine.setOnFinished(playbackFinished); // 新增：打通播放结束到全局状态
       engine.start(compiled.timeline);
     });
 
     return () => { engine.destroy(); engineRef.current = null; };
-  }, [compiled]);
+  }, [compiled, reset, playbackFinished]);
 
   // 暂停
   useEffect(() => {

@@ -77,6 +77,7 @@ export class PlaybackEngine {
   private currentActionName = '';
   private currentPhase: Phase = 'warmup';
   private onUpdate: EngineUpdateCallback | null = null;
+  private onFinished: (() => void) | null = null;
 
   // ---- 初始化 ----
 
@@ -217,6 +218,9 @@ export class PlaybackEngine {
           this.isRunning = false;
           if (this.timerId) { clearInterval(this.timerId); this.timerId = null; }
           this.emitUpdate();
+          if (this.onFinished) {
+            this.onFinished();
+          }
         }
         return;
       }
