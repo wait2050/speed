@@ -65,6 +65,13 @@ export type TimelineItem =
     };
 
 // --- 编译统计 ---
+export interface ExcitementPoint {
+  elapsedMs: number;
+  actionName: string;
+  phase: Phase;
+  bpm: number;
+}
+
 export interface SequenceStats {
   totalDuration: number;        // 毫秒
   totalActionDuration: number;
@@ -73,7 +80,7 @@ export interface SequenceStats {
   warmupRounds: number;
   coreRounds: number;
   sprintRounds: number;
-  excitementPoints?: Array<{ elapsedMs: number; actionName: string }>;
+  excitementPoints?: ExcitementPoint[];
 }
 
 // --- 编译结果 ---
@@ -138,7 +145,8 @@ export type AppStatus =
   | 'READY'
   | 'PLAYING'
   | 'PAUSED'
-  | 'FINISHED';
+  | 'FINISHED'
+  | 'HISTORY_DETAIL';
 
 // --- 状态机 State ---
 export interface AppState {
