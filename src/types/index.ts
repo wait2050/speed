@@ -73,6 +73,7 @@ export interface SequenceStats {
   warmupRounds: number;
   coreRounds: number;
   sprintRounds: number;
+  excitementPoints?: Array<{ elapsedMs: number; actionName: string }>;
 }
 
 // --- 编译结果 ---

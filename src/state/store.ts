@@ -8,18 +8,21 @@ interface AppStore {
   status: AppStatus;
   compiled: CompiledSequence | null;
   totalDuration: number;
+  subjectiveClimaxTriggered: boolean;
   setDuration: (d: number) => void;
   startCompiling: () => void;
   compilationDone: (seq: CompiledSequence) => void;
   startPlaying: () => void;
   playbackFinished: () => void;
   reset: () => void;
+  setSubjectiveClimax: (triggered: boolean) => void;
 }
 
 export const useAppStore = create<AppStore>((set) => ({
   status: 'IDLE',
   compiled: null,
   totalDuration: 20 * 60,
+  subjectiveClimaxTriggered: false,
 
   setDuration: (d) => set({ totalDuration: d }),
   startCompiling: () => set({ status: 'COMPILING' }),
@@ -27,4 +30,5 @@ export const useAppStore = create<AppStore>((set) => ({
   startPlaying: () => set({ status: 'PLAYING' }),
   playbackFinished: () => set({ status: 'FINISHED' }),
   reset: () => set({ status: 'IDLE', compiled: null, totalDuration: 20 * 60 }),
+  setSubjectiveClimax: (triggered) => set({ subjectiveClimaxTriggered: triggered }),
 }));
