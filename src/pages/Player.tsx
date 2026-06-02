@@ -19,7 +19,7 @@ const PHASE_LABELS: Record<Phase, string> = {
 };
 
 export const Player: React.FC = () => {
-  const { compiled, reset } = useAppStore();
+  const { compiled, reset, subjectiveClimaxTriggered, setSubjectiveClimax } = useAppStore();
   const engineRef = useRef<PlaybackEngine | null>(null);
 
   // 显示状态（引擎单向推送）
@@ -83,7 +83,88 @@ export const Player: React.FC = () => {
     engineRef.current?.destroy();
     reset();
     clearProgress();
-  }, [reset]);
+    setSubjectiveClimax(false);
+  }, [reset, setSubjectiveClimax]);
+
+  // 双向自适应盲控控制器状态和事件
+  const [isExcited, setIsExcited] = useState(false);
+  const [offsetX, setOffsetX] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const touchStartRef = useRef(0);
+  const exciteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleExcitement = useCallback(() => {
+    engineRef.current?.recordExcitement(ds.actionName);
+    setIsExcited(true);
+    if (exciteTimerRef.current) clearTimeout(exciteTimerRef.current);
+    exciteTimerRef.current = setTimeout(() => {
+      setIsExcited(false);
+    }, 800);
+  }, [ds.actionName]);
+
+  const handleClimaxOrAfterglow = useCallback(() => {
+    if (ds.phase !== 'climax') {
+      engineRef.current?.triggerSubjectiveClimax('从上方和下方捏住并旋转');
+      setSubjectiveClimax(true);
+    } else {
+      engineRef.current?.triggerReleaseAfterglow('捏住并不断变换力度');
+      setSubjectiveClimax(false);
+    }
+  }, [ds.phase, setSubjectiveClimax]);
+
+  // 触屏手势绑定
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    if (ds.phase === 'warmup') return;
+    touchStartRef.current = e.touches[0].clientX;
+    setIsDragging(true);
+  }, [ds.phase]);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (!isDragging || ds.phase === 'warmup') return;
+    const currentX = e.touches[0].clientX;
+    const diffX = currentX - touchStartRef.current;
+    // 物理拉拽限制位移为 -80 到 80
+    const maxDrag = 80;
+    const clampedDiff = Math.max(-maxDrag, Math.min(maxDrag, diffX));
+    setOffsetX(clampedDiff);
+  }, [isDragging, ds.phase]);
+
+  const handleTouchEnd = useCallback(() => {
+    if (!isDragging || ds.phase === 'warmup') return;
+    setIsDragging(false);
+    if (offsetX < -60) {
+      handleExcitement();
+    } else if (offsetX > 60) {
+      handleClimaxOrAfterglow();
+    }
+    setOffsetX(0);
+  }, [isDragging, ds.phase, offsetX, handleExcitement, handleClimaxOrAfterglow]);
+
+  // 键盘操作绑定 ArrowLeft 和 ArrowRight
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (ds.phase === 'warmup') return;
+      if (e.key === 'ArrowLeft') {
+        engineRef.current?.recordExcitement(ds.actionName);
+        setIsExcited(true);
+        if (exciteTimerRef.current) clearTimeout(exciteTimerRef.current);
+        exciteTimerRef.current = setTimeout(() => setIsExcited(false), 800);
+      } else if (e.key === 'ArrowRight') {
+        if (ds.phase !== 'climax') {
+          engineRef.current?.triggerSubjectiveClimax('从上方和下方捏住并旋转');
+          setSubjectiveClimax(true);
+        } else {
+          engineRef.current?.triggerReleaseAfterglow('捏住并不断变换力度');
+          setSubjectiveClimax(false);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      if (exciteTimerRef.current) clearTimeout(exciteTimerRef.current);
+    };
+  }, [ds.phase, ds.actionName, setSubjectiveClimax]);
 
   const segments: PhaseSegment[] = useMemo(
     () => compiled ? computePhaseSegments(compiled.timeline) : [],
@@ -96,7 +177,7 @@ export const Player: React.FC = () => {
   }
 
   return (
-    <div className="page player-page">
+    <div className={`page player-page ${subjectiveClimaxTriggered || ds.phase === 'climax' ? 'climax-active' : ''} ${isExcited ? 'excited-flash' : ''}`}>
       <ProgressBar
         segments={segments}
         elapsedMs={ds.totalElapsedMs}
@@ -107,6 +188,25 @@ export const Player: React.FC = () => {
       <div className="player-phase">{PHASE_LABELS[ds.phase] ?? ds.phase}</div>
       <div className="player-action-name">{ds.actionName}</div>
       <Timer remainingMs={ds.actionRemainingMs} totalMs={ds.actionRemainingMs || 60000} />
+
+      {/* 凹槽滑块卡圈 SubjectiveSlider 双向自适应盲控控制器 */}
+      <div className={`subjective-slider ${ds.phase === 'warmup' ? 'disabled' : ''}`}>
+        <div className="slider-track-glow" />
+        <div className="slider-label slider-label-left">⚡ 极度兴奋 (左滑/←)</div>
+        <div
+          className="slider-handle"
+          style={{ transform: `translateX(${offsetX}px)` }}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+        >
+          <div className="slider-handle-inner" />
+        </div>
+        <div className="slider-label slider-label-right">
+          {ds.phase === 'climax' ? '✨ 释放余韵 (右滑/→)' : '🔥 开启冲刺 (右滑/→)'}
+        </div>
+      </div>
+
       <div className="player-controls">
         <button className="btn btn-pause" onClick={togglePause}>
           {ds.isPaused ? '▶ 继续' : '⏸ 暂停'}
