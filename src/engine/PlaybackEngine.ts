@@ -116,6 +116,11 @@ export class PlaybackEngine {
     this.onUpdate = cb;
   }
 
+  /** 注册播放结束回调 */
+  setOnFinished(cb: () => void): void {
+    this.onFinished = cb;
+  }
+
   // ---- 播放控制 ----
 
   start(timeline: TimelineItem[]): void {
