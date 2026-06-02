@@ -19,7 +19,7 @@ const PHASE_LABELS: Record<Phase, string> = {
 };
 
 export const Player: React.FC = () => {
-  const { compiled, reset, subjectiveClimaxTriggered, setSubjectiveClimax, playbackFinished } = useAppStore();
+  const { compiled, reset, subjectiveClimaxTriggered, setSubjectiveClimax, playbackFinished, addExcitementPoint } = useAppStore();
   const engineRef = useRef<PlaybackEngine | null>(null);
 
   // 显示状态（引擎单向推送）
@@ -96,12 +96,15 @@ export const Player: React.FC = () => {
 
   const handleExcitement = useCallback(() => {
     engineRef.current?.recordExcitement(ds.actionName);
+    // 实时推送打点到 Zustand store
+    const point = engineRef.current?.getLastExcitementPoint();
+    if (point) addExcitementPoint(point);
     setIsExcited(true);
     if (exciteTimerRef.current) clearTimeout(exciteTimerRef.current);
     exciteTimerRef.current = setTimeout(() => {
       setIsExcited(false);
     }, 800);
-  }, [ds.actionName]);
+  }, [ds.actionName, addExcitementPoint]);
 
   const handleClimaxOrAfterglow = useCallback(() => {
     if (ds.phase !== 'climax') {
@@ -147,6 +150,8 @@ export const Player: React.FC = () => {
       if (ds.phase === 'warmup') return;
       if (e.key === 'ArrowLeft') {
         engineRef.current?.recordExcitement(ds.actionName);
+        const point = engineRef.current?.getLastExcitementPoint();
+        if (point) addExcitementPoint(point);
         setIsExcited(true);
         if (exciteTimerRef.current) clearTimeout(exciteTimerRef.current);
         exciteTimerRef.current = setTimeout(() => setIsExcited(false), 800);
@@ -165,7 +170,7 @@ export const Player: React.FC = () => {
       window.removeEventListener('keydown', handleKeyDown);
       if (exciteTimerRef.current) clearTimeout(exciteTimerRef.current);
     };
-  }, [ds.phase, ds.actionName, setSubjectiveClimax]);
+  }, [ds.phase, ds.actionName, setSubjectiveClimax, addExcitementPoint]);
 
   const segments: PhaseSegment[] = useMemo(
     () => compiled ? computePhaseSegments(compiled.timeline) : [],

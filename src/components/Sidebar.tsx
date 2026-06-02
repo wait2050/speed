@@ -5,6 +5,7 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { loadHistory, loadFavorites, removeFavorite } from '../storage';
 import { formatSec } from '../utils/time';
 import { readImportFile } from '../storage/export';
+import { useAppStore } from '../state/store';
 import type { HistoryEntry, Favorite, CompiledSequence } from '../types';
 
 interface Props {
@@ -21,6 +22,7 @@ export const Sidebar: React.FC<Props> = ({ isOpen, onClose, onLoadSequence }) =>
   const [favorites, setFavorites] = useState<Favorite[]>([]);
   const [importError, setImportError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const showHistoryDetail = useAppStore((s) => s.showHistoryDetail);
 
   useEffect(() => {
     if (isOpen) {
@@ -127,7 +129,7 @@ export const Sidebar: React.FC<Props> = ({ isOpen, onClose, onLoadSequence }) =>
               <div
                 key={h.id}
                 className="sidebar-item"
-                onClick={() => handleLoad(h.sequence)}
+                onClick={() => { showHistoryDetail(h.id); onClose(); }}
               >
                 <div className="sidebar-item-main">
                   <span className="sidebar-item-label">

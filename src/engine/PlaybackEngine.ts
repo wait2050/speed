@@ -7,7 +7,7 @@
 // - 引擎通过 onUpdate 回调单向推送显示数据到 React
 // - setInterval + audioContext.currentTime 预调度（行业金标准）
 // ============================================================
-import type { TimelineItem, SoundType, Phase } from '../types';
+import type { TimelineItem, SoundType, Phase, ExcitementPoint } from '../types';
 import {
   synthesizeTick, synthesizeWoodblock, synthesizeHeartbeat,
   synthesizeWaterdrop, synthesizeFingertap, synthesizeBassdrum,
@@ -76,6 +76,8 @@ export class PlaybackEngine {
 
   private currentActionName = '';
   private currentPhase: Phase = 'warmup';
+  private currentBpm = 0;
+  private excitementPoints: ExcitementPoint[] = [];
   private onUpdate: EngineUpdateCallback | null = null;
   private onFinished: (() => void) | null = null;
 
@@ -135,6 +137,7 @@ export class PlaybackEngine {
     this.elapsedBeforePause = 0;
     this.scheduledBeats.clear();
     this.snapsPlayed.clear();
+    this.excitementPoints = [];
     this.lastVoiceKey = '';
     this.voiceEndTime = 0;
     this.startTime = this.ctx.currentTime;
@@ -240,6 +243,7 @@ export class PlaybackEngine {
         if (item.type === 'action') {
           this.currentActionName = item.name;
           this.currentPhase = item.phase;
+          this.currentBpm = item.bpm;
 
           // 语音
           const voiceKey = `a_${accumulatedMs}`;
@@ -497,13 +501,30 @@ export class PlaybackEngine {
     src.start(this.ctx.currentTime);
   }
 
-  /** 盲操打点收集器：播放微振风铃音并返回当前耗时 */
+  /** 盲操打点收集器：播放微振风铃音并返回当前耗时，同时录入完整打点上下文 */
   recordExcitement(actionName: string): number {
     this.playExcitementDing();
     if (typeof navigator !== 'undefined' && navigator.vibrate) {
       navigator.vibrate([20, 40, 20]);
     }
+    this.excitementPoints.push({
+      elapsedMs: this.totalElapsedMs,
+      actionName,
+      phase: this.currentPhase,
+      bpm: this.currentBpm || 60,
+    });
     return this.totalElapsedMs;
+  }
+
+  /** 获取本次播放所有实录打点数据 */
+  getExcitementPoints(): ExcitementPoint[] {
+    return [...this.excitementPoints];
+  }
+
+  /** 获取最近一次打点的完整信息（供 UI 即时推送到 Zustand） */
+  getLastExcitementPoint(): ExcitementPoint | null {
+    if (this.excitementPoints.length === 0) return null;
+    return { ...this.excitementPoints[this.excitementPoints.length - 1] };
   }
 
   /** 跃迁动态 timeline 重构：保留当前动作的已进行时长，截断后续，并追加冲刺高潮 */

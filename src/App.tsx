@@ -7,6 +7,7 @@ import { Home } from './pages/Home';
 import { Preview } from './pages/Preview';
 import { Player } from './pages/Player';
 import { Landing } from './pages/Landing';
+import { HistoryDetail } from './pages/HistoryDetail';
 import { Sidebar } from './components/Sidebar';
 import { loadProgress } from './storage';
 import { audioEngine } from './audio/engine';
@@ -41,7 +42,7 @@ const AppInner: React.FC = () => {
     compilationDone(seq);
   }, [compilationDone]);
 
-  const showHamburger = status === 'IDLE' || status === 'READY' || status === 'FINISHED';
+  const showHamburger = status === 'IDLE' || status === 'READY' || status === 'FINISHED' || status === 'HISTORY_DETAIL';
 
   const page = (() => {
     switch (status) {
@@ -57,6 +58,7 @@ const AppInner: React.FC = () => {
       case 'PLAYING':
       case 'PAUSED': return <Player />;
       case 'FINISHED': return <Landing />;
+      case 'HISTORY_DETAIL': return <HistoryDetail />;
       default: return <Home />;
     }
   })();
