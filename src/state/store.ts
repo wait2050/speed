@@ -10,6 +10,7 @@ interface AppStore {
   totalDuration: number;
   subjectiveClimaxTriggered: boolean;
   selectedHistoryId: string | null;
+  excitementPoints: ExcitementPoint[];
   setDuration: (d: number) => void;
   startCompiling: () => void;
   compilationDone: (seq: CompiledSequence) => void;
@@ -27,26 +28,17 @@ export const useAppStore = create<AppStore>((set) => ({
   totalDuration: 20 * 60,
   subjectiveClimaxTriggered: false,
   selectedHistoryId: null,
+  excitementPoints: [],
 
   setDuration: (d) => set({ totalDuration: d }),
   startCompiling: () => set({ status: 'COMPILING' }),
-  compilationDone: (seq) => set({ status: 'READY', compiled: seq }),
+  compilationDone: (seq) => set({ status: 'READY', compiled: seq, excitementPoints: [] }),
   startPlaying: () => set({ status: 'PLAYING' }),
   playbackFinished: () => set({ status: 'FINISHED' }),
-  reset: () => set({ status: 'IDLE', compiled: null, totalDuration: 20 * 60, selectedHistoryId: null, subjectiveClimaxTriggered: false }),
+  reset: () => set({ status: 'IDLE', compiled: null, totalDuration: 20 * 60, selectedHistoryId: null, subjectiveClimaxTriggered: false, excitementPoints: [] }),
   setSubjectiveClimax: (triggered) => set({ subjectiveClimaxTriggered: triggered }),
   showHistoryDetail: (id) => set({ status: 'HISTORY_DETAIL', selectedHistoryId: id }),
-  addExcitementPoint: (point) => set((state) => {
-    if (!state.compiled) return state;
-    const oldPoints = state.compiled.stats.excitementPoints || [];
-    return {
-      compiled: {
-        ...state.compiled,
-        stats: {
-          ...state.compiled.stats,
-          excitementPoints: [...oldPoints, point]
-        }
-      }
-    };
-  }),
+  addExcitementPoint: (point) => set((state) => ({
+    excitementPoints: [...state.excitementPoints, point],
+  })),
 }));

@@ -9,7 +9,7 @@ import { buildExportData, downloadExport } from '../storage/export';
 import type { HistoryEntry } from '../types';
 
 export const Landing: React.FC = () => {
-  const { compiled, totalDuration, reset } = useAppStore();
+  const { compiled, totalDuration, reset, excitementPoints } = useAppStore();
   const [rating, setRating] = useState<number | null>(null);
   const [showFavorite, setShowFavorite] = useState(false);
   const [favLabel, setFavLabel] = useState('');
@@ -33,19 +33,26 @@ export const Landing: React.FC = () => {
     setRating(r);
 
     if (compiled) {
+      // 合入独立存储的兴奋打点数据
+      const mergedStats = {
+        ...compiled.stats,
+        excitementPoints: excitementPoints.length > 0 ? excitementPoints : compiled.stats.excitementPoints,
+      };
+      const mergedCompiled = { ...compiled, stats: mergedStats };
+
       const entry: HistoryEntry = {
         id: `h_${Date.now()}`,
         timestamp: Date.now(),
         totalDuration: totalDuration,
-        stats: compiled.stats,
+        stats: mergedStats,
         rating: r,
-        sequence: compiled,
+        sequence: mergedCompiled,
       };
       saveHistory(entry);
     }
 
     setShowFavorite(true);
-  }, [compiled, totalDuration]);
+  }, [compiled, totalDuration, excitementPoints]);
 
   const handleFavorite = useCallback(() => {
     if (compiled && favLabel.trim()) {

@@ -21,6 +21,8 @@ const PHASE_LABELS: Record<Phase, string> = {
 export const Player: React.FC = () => {
   const { compiled, reset, subjectiveClimaxTriggered, setSubjectiveClimax, playbackFinished, addExcitementPoint } = useAppStore();
   const engineRef = useRef<PlaybackEngine | null>(null);
+  const compiledRef = useRef(compiled); // 用 ref 避免 compiled 变更触发 useEffect 重建
+  compiledRef.current = compiled;
 
   // 显示状态（引擎单向推送）
   const [ds, setDs] = useState<EngineDisplayState>({
@@ -28,9 +30,10 @@ export const Player: React.FC = () => {
     totalElapsedMs: 0, phase: 'warmup', isPaused: false,
   });
 
-  // 启动
+  // 启动 — 只在组件首次挂载时运行，不因 compiled 引用变化重建
   useEffect(() => {
-    if (!compiled?.timeline?.length) {
+    const c = compiledRef.current;
+    if (!c?.timeline?.length) {
       reset();
       return;
     }
@@ -40,12 +43,12 @@ export const Player: React.FC = () => {
 
     engine.init().then(() => {
       engine.setOnUpdate(setDs);
-      engine.setOnFinished(playbackFinished); // 新增：打通播放结束到全局状态
-      engine.start(compiled.timeline);
+      engine.setOnFinished(playbackFinished);
+      engine.start(c.timeline);
     });
 
     return () => { engine.destroy(); engineRef.current = null; };
-  }, [compiled, reset, playbackFinished]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 暂停
   useEffect(() => {
@@ -116,38 +119,37 @@ export const Player: React.FC = () => {
     }
   }, [ds.phase, setSubjectiveClimax]);
 
-  // 触屏手势绑定
+  // 触屏手势绑定 — 左滑(兴奋打点)全阶段可用，右滑(冲刺)仅在热身后
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    if (ds.phase === 'warmup') return;
     touchStartRef.current = e.touches[0].clientX;
     setIsDragging(true);
-  }, [ds.phase]);
+  }, []);
 
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
-    if (!isDragging || ds.phase === 'warmup') return;
+    if (!isDragging) return;
     const currentX = e.touches[0].clientX;
     const diffX = currentX - touchStartRef.current;
-    // 物理拉拽限制位移为 -80 到 80
     const maxDrag = 80;
     const clampedDiff = Math.max(-maxDrag, Math.min(maxDrag, diffX));
     setOffsetX(clampedDiff);
-  }, [isDragging, ds.phase]);
+  }, [isDragging]);
 
   const handleTouchEnd = useCallback(() => {
-    if (!isDragging || ds.phase === 'warmup') return;
+    if (!isDragging) return;
     setIsDragging(false);
     if (offsetX < -60) {
+      // 左滑：兴奋打点（所有阶段均可）
       handleExcitement();
-    } else if (offsetX > 60) {
+    } else if (offsetX > 60 && ds.phase !== 'warmup') {
+      // 右滑：冲刺/释放（热身期间禁用）
       handleClimaxOrAfterglow();
     }
     setOffsetX(0);
   }, [isDragging, ds.phase, offsetX, handleExcitement, handleClimaxOrAfterglow]);
 
-  // 键盘操作绑定 ArrowLeft 和 ArrowRight
+  // 键盘操作绑定 — ArrowLeft(打点)全阶段可用，ArrowRight(冲刺)热身禁用
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (ds.phase === 'warmup') return;
       if (e.key === 'ArrowLeft') {
         engineRef.current?.recordExcitement(ds.actionName);
         const point = engineRef.current?.getLastExcitementPoint();
@@ -155,7 +157,7 @@ export const Player: React.FC = () => {
         setIsExcited(true);
         if (exciteTimerRef.current) clearTimeout(exciteTimerRef.current);
         exciteTimerRef.current = setTimeout(() => setIsExcited(false), 800);
-      } else if (e.key === 'ArrowRight') {
+      } else if (e.key === 'ArrowRight' && ds.phase !== 'warmup') {
         if (ds.phase !== 'climax') {
           engineRef.current?.triggerSubjectiveClimax('从上方和下方捏住并旋转');
           setSubjectiveClimax(true);
@@ -196,7 +198,7 @@ export const Player: React.FC = () => {
       <Timer remainingMs={ds.actionRemainingMs} totalMs={ds.actionRemainingMs || 60000} />
 
       {/* 凹槽滑块卡圈 SubjectiveSlider 双向自适应盲控控制器 */}
-      <div className={`subjective-slider ${ds.phase === 'warmup' ? 'disabled' : ''}`}>
+      <div className="subjective-slider">
         <div className="slider-track-glow" />
         <div className="slider-label slider-label-left">⚡ 极度兴奋 (左滑/←)</div>
         <div
