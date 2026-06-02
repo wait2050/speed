@@ -94,16 +94,33 @@ export class PlaybackEngine {
     this.signalBuffers.set('double_ding', this.makeDing(2));
     this.signalBuffers.set('heavy_beats', this.makeHeavyBeat());
 
-    // 合成打响指音效
-    this.snapBuffer = this.makeSnap();
+    // 合成打响指音效 → 改为异步加载真实音频
+    // (在 init 末尾 loadSnap() 中加载)
 
     // 合成主观狂热微振风铃音
     this.excitementBuffer = synthesizeExcitementDing();
 
     this.initialized = true;
 
-    // 后台加载语音
+    // 后台加载语音 + 响指音频
     this.loadVoices();
+    this.loadSnap();
+  }
+
+  /** 异步加载响指 MP3 */
+  private async loadSnap(): Promise<void> {
+    if (!this.ctx) return;
+    try {
+      const base = import.meta.env.BASE_URL || '/';
+      const resp = await fetch(`${base}snap.mp3`);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const arrayBuf = await resp.arrayBuffer();
+      this.snapBuffer = await this.ctx.decodeAudioData(arrayBuf);
+      console.log('[PlaybackEngine] 响指音频加载成功');
+    } catch (e) {
+      console.warn('[PlaybackEngine] 响指音频加载失败，回退合成', e);
+      this.snapBuffer = this.makeSnap();
+    }
   }
 
   /** 注册 UI 更新回调 */
@@ -461,24 +478,14 @@ export class PlaybackEngine {
     return buf;
   }
 
-  /** 播放打响指 */
+  /** 播放打响指（真实音频直接播放） */
   playSnap(): void {
     if (!this.ctx || !this.snapBuffer) return;
     const src = this.ctx.createBufferSource();
     src.buffer = this.snapBuffer;
-    // 高通 + 带通组合，强调高频
-    const hp = this.ctx.createBiquadFilter();
-    hp.type = 'highpass';
-    hp.frequency.value = 1500;
-    const bp = this.ctx.createBiquadFilter();
-    bp.type = 'bandpass';
-    bp.frequency.value = 4000;
-    bp.Q.value = 2;
     const gain = this.ctx.createGain();
-    gain.gain.value = 0.8;
-    src.connect(hp);
-    hp.connect(bp);
-    bp.connect(gain);
+    gain.gain.value = 1.0;
+    src.connect(gain);
     gain.connect(this.ctx.destination);
     src.start(this.ctx.currentTime + 0.005);
   }
