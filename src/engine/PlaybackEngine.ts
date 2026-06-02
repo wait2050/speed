@@ -11,6 +11,7 @@ import type { TimelineItem, SoundType, Phase } from '../types';
 import {
   synthesizeTick, synthesizeWoodblock, synthesizeHeartbeat,
   synthesizeWaterdrop, synthesizeFingertap, synthesizeBassdrum,
+  synthesizeExcitementDing,
 } from '../audio/sounds';
 import { BPM_BOOST_DURATION, BPM_BOOST_AMOUNT } from '../compiler/rules';
 
@@ -60,6 +61,7 @@ export class PlaybackEngine {
   private signalBuffers = new Map<string, AudioBuffer>();
   private voiceBuffers = new Map<string, AudioBuffer>();
   private snapBuffer: AudioBuffer | null = null;
+  private excitementBuffer: AudioBuffer | null = null;
   private initialized = false;
 
   private timeline: TimelineItem[] = [];
@@ -98,6 +100,9 @@ export class PlaybackEngine {
 
     // 合成打响指音效
     this.snapBuffer = this.makeSnap();
+
+    // 合成主观狂热微振风铃音
+    this.excitementBuffer = synthesizeExcitementDing();
 
     this.initialized = true;
 
@@ -470,5 +475,161 @@ export class PlaybackEngine {
     bp.connect(gain);
     gain.connect(this.ctx.destination);
     src.start(this.ctx.currentTime + 0.005);
+  }
+
+  /** 播放主观打点风铃音 */
+  playExcitementDing(): void {
+    if (!this.ctx || !this.excitementBuffer) return;
+    const src = this.ctx.createBufferSource();
+    src.buffer = this.excitementBuffer;
+    const gain = this.ctx.createGain();
+    gain.gain.value = 0.8;
+    src.connect(gain).connect(this.ctx.destination);
+    src.start(this.ctx.currentTime);
+  }
+
+  /** 盲操打点收集器：播放微振风铃音并返回当前耗时 */
+  recordExcitement(actionName: string): number {
+    this.playExcitementDing();
+    if (typeof navigator !== 'undefined' && navigator.vibrate) {
+      navigator.vibrate([20, 40, 20]);
+    }
+    return this.totalElapsedMs;
+  }
+
+  /** 跃迁动态 timeline 重构：保留当前动作的已进行时长，截断后续，并追加冲刺高潮 */
+  triggerSubjectiveClimax(actionName: string): void {
+    if (!this.ctx || !this.isRunning) return;
+    const elapsedMs = this.totalElapsedMs;
+    this.scheduledBeats.clear(); // 清空旧的节拍
+    this.lastVoiceKey = ''; // 允许重新播放动作提示
+
+    // 1. 保留当前时间点前的所有timeline内容，并精确截断当前正在进行的动作
+    let accumulatedMs = 0;
+    const newTimeline: TimelineItem[] = [];
+
+    for (const item of this.timeline) {
+      if (item.type === 'end') break;
+      const dur = item.type === 'action' || item.type === 'rest' ? item.duration : 0;
+      if (accumulatedMs + dur <= elapsedMs) {
+        newTimeline.push(item);
+        accumulatedMs += dur;
+      } else {
+        // 方案 A（精确截断保留）：落入当前区间的动作项目，计算已进行的时长
+        if ((item.type === 'action' || item.type === 'rest') && elapsedMs > accumulatedMs) {
+          const elapsedInItem = elapsedMs - accumulatedMs;
+          if (elapsedInItem > 0) {
+            newTimeline.push({
+              ...item,
+              duration: elapsedInItem
+            } as TimelineItem);
+            accumulatedMs += elapsedInItem;
+          }
+        }
+        break; // 掐断后续
+      }
+    }
+
+    // 2. 插入重鼓过渡音
+    newTimeline.push({
+      type: 'transition',
+      signal: 'heavy_beats',
+      phase: 'climax'
+    });
+
+    // 3. 动态追加无限高潮刺激（12小时 43,200,000 ms）
+    newTimeline.push({
+      type: 'action',
+      name: actionName,
+      duration: 43200000,
+      bpm: 135,
+      sound: 'bassdrum',
+      volume: 1.0,
+      phase: 'climax'
+    });
+
+    newTimeline.push({ type: 'end' });
+    this.timeline = newTimeline;
+
+    // 震动保护
+    if (typeof navigator !== 'undefined' && navigator.vibrate) {
+      navigator.vibrate([100, 50, 100]);
+    }
+  }
+
+  /** 动态释放进入终局：保留当前动作已进行时长，截弯取直流畅拼装冷静冷静冷静冷静终局三部曲 */
+  triggerReleaseAfterglow(afterglowActionName: string): void {
+    if (!this.ctx || !this.isRunning) return;
+    const elapsedMs = this.totalElapsedMs;
+    this.scheduledBeats.clear();
+    this.lastVoiceKey = '';
+
+    // 1. 保留当前时间点前的timeline内容并精确截断当前正在进行的无限高潮动作
+    let accumulatedMs = 0;
+    const newTimeline: TimelineItem[] = [];
+
+    for (const item of this.timeline) {
+      if (item.type === 'end') break;
+      const dur = item.type === 'action' || item.type === 'rest' ? item.duration : 0;
+      if (accumulatedMs + dur <= elapsedMs) {
+        newTimeline.push(item);
+        accumulatedMs += dur;
+      } else {
+        // 对于当前正在经历的高潮动作进行强行截断，保留之前跑过的时间
+        if ((item.type === 'action' || item.type === 'rest') && elapsedMs > accumulatedMs) {
+          const elapsedInItem = elapsedMs - accumulatedMs;
+          if (elapsedInItem > 0) {
+            newTimeline.push({
+              ...item,
+              duration: elapsedInItem
+            } as TimelineItem);
+            accumulatedMs += elapsedInItem;
+          }
+        }
+        break;
+      }
+    }
+
+    // 2. 无缝追加终局三部曲：余韵 1分钟 + 收尾 15秒 + 着陆 30秒
+    // 2.1 余韵
+    newTimeline.push({
+      type: 'action',
+      name: afterglowActionName,
+      duration: 60 * 1000,
+      bpm: 120,
+      sound: 'heartbeat',
+      volume: 0.9,
+      phase: 'afterglow'
+    });
+
+    // 2.2 收尾
+    newTimeline.push({
+      type: 'action',
+      name: '收尾缓冲',
+      duration: 15 * 1000,
+      bpm: 20, // 3秒一个单拍
+      sound: 'tick',
+      volume: 0.7,
+      phase: 'cooldown'
+    });
+
+    // 2.3 静静着陆标记 (静音着陆30秒)
+    newTimeline.push({
+      type: 'action',
+      name: '静默着陆中',
+      duration: 30 * 1000,
+      bpm: 1, // 不打节拍
+      sound: 'fingertap',
+      volume: 0,
+      phase: 'landing'
+    });
+
+    newTimeline.push({ type: 'end' });
+    this.timeline = newTimeline;
+
+    // 震动保护
+    if (typeof navigator !== 'undefined' && navigator.vibrate) {
+      navigator.vibrate([40, 200]);
+    }
   }
 }

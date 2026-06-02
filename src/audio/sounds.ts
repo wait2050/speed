@@ -120,3 +120,20 @@ function createSineBuffer(freq: number, duration: number, amplitude: number): Au
   }
   return buf;
 }
+
+// --- excitement_ding: 高频空灵水滴风铃声，800ms 柔和余韵 ---
+export function synthesizeExcitementDing(): AudioBuffer {
+  const len = secondsToFrames(0.8);
+  const buf = new AudioBuffer({ length: len, sampleRate: SAMPLE_RATE });
+  const ch = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) {
+    const t = i / SAMPLE_RATE;
+    const env = Math.exp(-t / 0.15); // 快速起，慢慢余音跌落
+    ch[i] = (
+      0.35 * Math.sin(2 * Math.PI * 1500 * t) * env +
+      0.15 * Math.sin(2 * Math.PI * 3000 * t) * env
+    );
+  }
+  return buf;
+}
+
