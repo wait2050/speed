@@ -69,6 +69,8 @@ export function synthTimbre(ctx: BaseAudioContext, timbre: Timbre): AudioBuffer 
         const click = t < 0.008 ? Math.sin(2 * Math.PI * 2600 * t) * (1 - t / 0.008) * 0.6 : 0
         d[i] = Math.sin(2 * Math.PI * f * t) * env(t, 0.002, 0.14) + click
       })
+    case 'silence':
+      return makeBuffer(ctx, 0.01, () => {})
     default:
       return makeBuffer(ctx, 0.1, (t, d) => {
         const i = Math.floor(t * ctx.sampleRate)

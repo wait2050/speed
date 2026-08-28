@@ -1,9 +1,8 @@
-// 播放器会话 Hook：驱动音频引擎（AudioScheduler / BufferPlayer）+ 振动脉冲 + 进度存档
+// 播放器会话 Hook（PRD v3）：亮屏常亮 + 后台自动暂停 + 扣屏渐隐 + 语音播报 + 进度存档
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { AudioScheduler } from '../audio/scheduler'
-import { BufferPlayer } from '../audio/bufferPlayer'
-import { isOfflineRenderSupported, renderTimelineToBuffer } from '../audio/offlineRenderer'
 import { VibrationController } from '../audio/vibration'
+import { VoiceController } from '../audio/voice'
 import { buildTimeline } from '../audio/timeline'
 import { generateOrchestration } from '../domain/engine'
 import type { Orchestration, Settings } from '../domain/types'
@@ -27,11 +26,6 @@ interface ActiveSession {
   totalSec: number
 }
 
-type PlaybackEngine = AudioScheduler | BufferPlayer
-
-/** 短会话阈值：总时长+着陆 ≤ 6 分钟时走预渲染 AudioBuffer（hybrid 息屏路径） */
-const SHORT_SESSION_MS = 6 * 60 * 1000
-
 export function usePlayer() {
   const [active, setActive] = useState<ActiveSession | null>(() => getCurrentSession())
   const [pendingResume, setPendingResume] = useState<SessionProgress | null>(() =>
@@ -41,10 +35,13 @@ export function usePlayer() {
     getCurrentSession() ? 'idle' : loadProgress() ? 'resume-offer' : 'idle',
   )
   const [elapsedMs, setElapsedMs] = useState(0)
+  const [faceDown, setFaceDown] = useState(false)
 
   const ctxRef = useRef<AudioContext | null>(null)
-  const playerRef = useRef<PlaybackEngine | null>(null)
+  const playerRef = useRef<AudioScheduler | null>(null)
   const vibratorRef = useRef<VibrationController | null>(null)
+  const voiceRef = useRef<VoiceController | null>(null)
+  const wakeLockRef = useRef<WakeLockSentinel | null>(null)
   const intervalRef = useRef<number | null>(null)
   const lastSaveRef = useRef(-1)
   const disposedRef = useRef(false)
@@ -105,39 +102,43 @@ export function usePlayer() {
     return ctx
   }, [])
 
+  const requestWakeLock = useCallback(async () => {
+    const act = activeRef.current
+    if (!act?.settings.wakeLock) return
+    try {
+      if ('wakeLock' in navigator && document.visibilityState === 'visible' && !wakeLockRef.current) {
+        wakeLockRef.current = await navigator.wakeLock.request('screen')
+      }
+    } catch {
+      // 忽略不支持/拒绝
+    }
+  }, [])
+
+  const releaseWakeLock = useCallback(() => {
+    wakeLockRef.current?.release().catch(() => undefined)
+    wakeLockRef.current = null
+  }, [])
+
   const initPlayback = useCallback(
     async (o: Orchestration, settings: Settings, seed: number, totalSec: number, seekMs: number) => {
       if (disposedRef.current) return
       const ctx = await ensureContext()
 
-      // 释放旧引擎
       if (playerRef.current) {
         playerRef.current.dispose()
         playerRef.current = null
       }
+      voiceRef.current?.dispose()
+      voiceRef.current = new VoiceController()
 
       const timeline = buildTimeline(o, settings)
-      const durationMs = o.totalMs + o.landing.durationMs
-      const useBuffer = isOfflineRenderSupported() && durationMs <= SHORT_SESSION_MS
-      let player: PlaybackEngine
-
-      if (useBuffer) {
-        // 短会话：预渲染为 AudioBuffer，单缓冲播放，减少后台调度依赖
-        const buffer = await renderTimelineToBuffer(timeline, durationMs)
-        const bp = new BufferPlayer(ctx)
-        bp.setBuffer(buffer)
-        bp.seek(seekMs)
-        await bp.play()
-        player = bp
-      } else {
-        const sched = new AudioScheduler(ctx)
-        sched.setTimeline(timeline)
-        if (seekMs > 0) sched.seek(seekMs)
-        else await sched.start()
-        player = sched
-      }
-
-      playerRef.current = player
+      const sched = new AudioScheduler(ctx, (prompt, whenSec) => {
+        voiceRef.current?.schedule(prompt, whenSec, ctx)
+      })
+      sched.setTimeline(timeline)
+      if (seekMs > 0) sched.seek(seekMs)
+      else await sched.start()
+      playerRef.current = sched
 
       const vib = vibratorRef.current ?? new VibrationController(settings.haptics)
       vib.setHaptics(settings.haptics)
@@ -148,9 +149,10 @@ export function usePlayer() {
       setElapsedMs(seekMs)
       setActive({ orchestration: o, settings, seed, totalSec })
       setStatus('playing')
+      void requestWakeLock()
       startPolling()
     },
-    [ensureContext, startPolling],
+    [ensureContext, requestWakeLock, startPolling],
   )
 
   const start = useCallback(async () => {
@@ -195,44 +197,71 @@ export function usePlayer() {
       if (statusRef.current === 'playing' || statusRef.current === 'landing') {
         await player.pause()
         setStatus('paused')
+        releaseWakeLock()
       } else if (statusRef.current === 'paused') {
         await player.resume()
         setStatus('playing')
+        void requestWakeLock()
       }
     } catch (err) {
       console.error(err)
     }
-  }, [])
+  }, [releaseWakeLock, requestWakeLock])
 
   const finishEarly = useCallback(() => {
     clearProgress()
     stopPolling()
     setStatus('finished')
+    releaseWakeLock()
     playerRef.current?.dispose()
     playerRef.current = null
-  }, [stopPolling])
+    voiceRef.current?.dispose()
+    voiceRef.current = null
+  }, [releaseWakeLock, stopPolling])
 
-  // 扣屏暂停 / 翻转继续（可选，降级为点按大区域）
+  // 扣屏暂停 / 翻转继续 + 渐隐全黑（可设置关闭）
   useEffect(() => {
     if (!('DeviceOrientationEvent' in window)) return
     let lastAction = 0
     const onOrientation = (ev: DeviceOrientationEvent) => {
       if (disposedRef.current) return
+      const act = activeRef.current
+      if (!act?.settings.faceDownPause) return
       const now = Date.now()
-      if (now - lastAction < 1500) return
+      if (now - lastAction < 1200) return
       const gamma = ev.gamma ?? 0
-      const faceDown = Math.abs(gamma) > 60
-      const faceUp = Math.abs(gamma) < 20
-      if (faceDown && (statusRef.current === 'playing' || statusRef.current === 'landing')) {
-        lastAction = now
-        void togglePause()
-      } else if (faceUp && statusRef.current === 'paused') {
-        lastAction = now
-        void togglePause()
+      const down = Math.abs(gamma) > 60
+      const up = Math.abs(gamma) < 20
+      if (down) {
+        setFaceDown(true)
+        if (statusRef.current === 'playing' || statusRef.current === 'landing') {
+          lastAction = now
+          void togglePause()
+        }
+      } else if (up) {
+        setFaceDown(false)
+        if (statusRef.current === 'paused') {
+          lastAction = now
+          void togglePause()
+        }
       }
     }
     window.addEventListener('deviceorientation', onOrientation)
-    return () => window.removeEventListener('deviceorientation', onOrientation)
+    return () => {
+      window.removeEventListener('deviceorientation', onOrientation)
+      setFaceDown(false)
+    }
+  }, [togglePause])
+
+  // 切后台/锁屏自动暂停
+  useEffect(() => {
+    const onVis = () => {
+      if (document.hidden && (statusRef.current === 'playing' || statusRef.current === 'landing')) {
+        void togglePause()
+      }
+    }
+    document.addEventListener('visibilitychange', onVis)
+    return () => document.removeEventListener('visibilitychange', onVis)
   }, [togglePause])
 
   // 卸载时保存进度并释放
@@ -240,6 +269,7 @@ export function usePlayer() {
     return () => {
       disposedRef.current = true
       stopPolling()
+      releaseWakeLock()
       const player = playerRef.current
       if (player && statusRef.current !== 'finished') {
         const elapsed = player.getElapsedMs()
@@ -256,10 +286,12 @@ export function usePlayer() {
         player.dispose()
         playerRef.current = null
       }
+      voiceRef.current?.dispose()
+      voiceRef.current = null
       ctxRef.current?.close().catch(() => undefined)
       ctxRef.current = null
     }
-  }, [stopPolling])
+  }, [releaseWakeLock, stopPolling])
 
   const segment = active ? getSegmentAt(active.orchestration, elapsedMs) : null
 
@@ -269,6 +301,7 @@ export function usePlayer() {
     pendingResume,
     elapsedMs,
     segment,
+    faceDown,
     start,
     resume,
     abandon,

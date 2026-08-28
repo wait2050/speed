@@ -265,6 +265,16 @@ input[type='text'] {
   margin-top: 12px;
 }
 
+/* 扣下手机：渐隐全黑防漏光 */
+.player-page.face-down {
+  background: #000;
+}
+
+.player-page.face-down .player-card {
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+
 /* ── 首页编排 ── */
 .field-label {
   display: block;

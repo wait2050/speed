@@ -13,14 +13,16 @@ export class AudioScheduler {
   private timer: number | null = null
   private paused = false
   private disposed = false
+  private onVoice?: (prompt: string, whenSec: number) => void
 
   private merger: ChannelMergerNode
   private leftGain: GainNode
   private rightGain: GainNode
   private centerGain: GainNode
 
-  constructor(ctx: AudioContext) {
+  constructor(ctx: AudioContext, onVoice?: (prompt: string, whenSec: number) => void) {
     this.ctx = ctx
+    this.onVoice = onVoice
     this.merger = ctx.createChannelMerger(2)
     this.leftGain = ctx.createGain()
     this.rightGain = ctx.createGain()
@@ -145,10 +147,16 @@ export class AudioScheduler {
   }
 
   private scheduleCue(ev: AudioEvent, when: number): void {
-    if (ev.cueType === 'silence' || ev.cueType === 'heartbeat-shift') return
+    if (ev.cueType === 'silence' || ev.cueType === 'heartbeat-shift' || ev.cueType === 'rest-start') return
+    if (ev.cueType === 'voice') {
+      if (ev.voicePrompt && this.onVoice) {
+        this.onVoice(ev.voicePrompt, when)
+      }
+      return
+    }
     const type = ev.cueType
-    const timbre = type === 'handoff' ? 'classic' : ev.timbre || 'classic'
-    const gain = type === 'handoff' ? 0.35 : ev.gain ?? 0.5
+    const timbre = type === 'handoff' || type === 'rest-before-end' ? 'classic' : ev.timbre || 'classic'
+    const gain = type === 'handoff' || type === 'rest-before-end' ? 0.35 : ev.gain ?? 0.5
     playTimbre(this.ctx, this.centerGain, timbre, when, gain)
     if (type === 'ding-ding') {
       playTimbre(this.ctx, this.centerGain, timbre, when + 0.18, gain)

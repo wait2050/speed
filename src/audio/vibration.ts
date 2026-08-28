@@ -14,6 +14,7 @@ const PATTERN_BY_TIMBRE: Record<Timbre, number[]> = {
   bassdrum: [40, 30, 40],
   woodfish: [20, 20],
   classic: [40],
+  silence: [],
 }
 
 const PATTERN_BY_CUE: Record<string, number[]> = {

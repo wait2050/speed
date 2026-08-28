@@ -1,5 +1,5 @@
-// 播放进度分段映射：根据 elapsedMs 得到当前显示信息
-import type { Orchestration, Side, Symmetry } from '../domain/types'
+// 播放进度分段映射：根据 elapsedMs 得到当前显示信息（PRD v3）
+import type { ActivityState, Orchestration, Side } from '../domain/types'
 import { SPRINT_LABEL, STAGE_LABEL } from '../domain/types'
 
 export type PlayPhase = 'warmup' | 'core' | 'sprint' | 'transition' | 'landing' | 'finished'
@@ -9,9 +9,21 @@ export interface PlaySegment {
   endMs: number
   phase: PlayPhase
   name: string
-  symmetry: Symmetry
+  activity: ActivityState
   dominant: Side
   sub?: string
+  directionHint?: 'up' | 'down'
+}
+
+function transitionSegment(t: { atMs: number; durMs: number }): PlaySegment {
+  return {
+    startMs: t.atMs,
+    endMs: t.atMs + t.durMs,
+    phase: 'transition',
+    name: '回落过渡',
+    activity: 'bilateral',
+    dominant: 'L',
+  }
 }
 
 export function buildSegments(o: Orchestration): PlaySegment[] {
@@ -24,23 +36,15 @@ export function buildSegments(o: Orchestration): PlaySegment[] {
       endMs: t + seg.durationMs,
       phase: 'warmup',
       name: seg.name,
-      symmetry: seg.symmetry,
+      activity: seg.activity,
       dominant: seg.dominant,
     })
     t += seg.durationMs
   }
 
-  // 热身 -> 核心过渡
   const warmupCore = o.transitions[0]
   if (warmupCore) {
-    segs.push({
-      startMs: warmupCore.atMs,
-      endMs: warmupCore.atMs + warmupCore.durMs,
-      phase: 'transition',
-      name: '回落过渡',
-      symmetry: 'full-symmetric',
-      dominant: 'L',
-    })
+    segs.push(transitionSegment(warmupCore))
     t = warmupCore.atMs + warmupCore.durMs
   }
 
@@ -51,38 +55,24 @@ export function buildSegments(o: Orchestration): PlaySegment[] {
         endMs: t + stage.durationMs,
         phase: 'core',
         name: `${unit.index + 1} 单元·${STAGE_LABEL[stage.name]}`,
-        symmetry: stage.symmetry,
+        activity: stage.activity,
         dominant: stage.dominant,
+        directionHint: stage.directionHint,
       })
       t += stage.durationMs
     }
     if (ui < o.core.length - 1) {
       const gap = o.transitions[ui + 1]
       if (gap) {
-        segs.push({
-          startMs: gap.atMs,
-          endMs: gap.atMs + gap.durMs,
-          phase: 'transition',
-          name: '回落过渡',
-          symmetry: 'full-symmetric',
-          dominant: 'L',
-        })
+        segs.push(transitionSegment(gap))
         t = gap.atMs + gap.durMs
       }
     }
   })
 
-  // 核心 -> 冲刺过渡（units 之后的第 n 个过渡）
   const coreSprint = o.transitions[o.core.length]
   if (coreSprint) {
-    segs.push({
-      startMs: coreSprint.atMs,
-      endMs: coreSprint.atMs + coreSprint.durMs,
-      phase: 'transition',
-      name: '回落过渡',
-      symmetry: 'full-symmetric',
-      dominant: 'L',
-    })
+    segs.push(transitionSegment(coreSprint))
     t = coreSprint.atMs + coreSprint.durMs
   }
 
@@ -92,7 +82,7 @@ export function buildSegments(o: Orchestration): PlaySegment[] {
       endMs: t + step.durationMs,
       phase: 'sprint' as PlayPhase,
       name: SPRINT_LABEL[step.sub],
-      symmetry: step.symmetry,
+      activity: step.activity,
       dominant: step.dominant,
       sub: step.sub,
     })
@@ -101,14 +91,7 @@ export function buildSegments(o: Orchestration): PlaySegment[] {
 
   const sprintLanding = o.transitions[o.core.length + 1]
   if (sprintLanding) {
-    segs.push({
-      startMs: sprintLanding.atMs,
-      endMs: sprintLanding.atMs + sprintLanding.durMs,
-      phase: 'transition',
-      name: '回落过渡',
-      symmetry: 'full-symmetric',
-      dominant: 'L',
-    })
+    segs.push(transitionSegment(sprintLanding))
     t = sprintLanding.atMs + sprintLanding.durMs
   }
 
@@ -117,7 +100,7 @@ export function buildSegments(o: Orchestration): PlaySegment[] {
     endMs: t + o.landing.durationMs,
     phase: 'landing',
     name: '静默着陆',
-    symmetry: 'full-symmetric',
+    activity: 'bilateral',
     dominant: 'L',
   })
 
@@ -134,7 +117,7 @@ export function getSegmentAt(o: Orchestration, elapsedMs: number): PlaySegment {
       endMs: o.totalMs + o.landing.durationMs,
       phase: 'finished',
       name: '已完成',
-      symmetry: 'full-symmetric',
+      activity: 'bilateral',
       dominant: 'L',
     }
   }

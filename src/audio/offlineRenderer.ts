@@ -29,7 +29,13 @@ export async function renderTimelineToBuffer(
     const when = ev.timeMs / 1000
     if (when >= endSec) continue
     if (ev.kind === 'cue') {
-      if (ev.cueType === 'silence' || ev.cueType === 'heartbeat-shift') continue
+      if (
+        ev.cueType === 'silence' ||
+        ev.cueType === 'heartbeat-shift' ||
+        ev.cueType === 'voice' ||
+        ev.cueType === 'rest-start' ||
+        ev.cueType === 'rest-before-end'
+      ) continue
       const timbre = ev.cueType === 'handoff' ? 'classic' : ev.timbre || 'classic'
       playTimbre(ctx, centerGain, timbre, when, ev.cueType === 'handoff' ? 0.35 : ev.gain ?? 0.5)
       if (ev.cueType === 'ding-ding') playTimbre(ctx, centerGain, timbre, when + 0.18, ev.gain ?? 0.5)

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { usePlayer } from '../../session/usePlayer'
 import { navigate } from '../../App'
-import { SYMMETRY_LABEL } from '../../domain/types'
+import { ACTIVITY_LABEL } from '../../domain/types'
 import { addFavorite, addHistory } from '../../storage/db'
 
 const PHASE_LABEL: Record<string, string> = {
@@ -22,7 +22,7 @@ function formatMs(ms: number): string {
 
 export default function PlayerPage() {
   const player = usePlayer()
-  const { status, active, pendingResume, elapsedMs, segment } = player
+  const { status, active, pendingResume, elapsedMs, segment, faceDown } = player
   const [rating, setRating] = useState(0)
   const [favName, setFavName] = useState('')
   const [favSaved, setFavSaved] = useState(false)
@@ -90,6 +90,7 @@ export default function PlayerPage() {
         <h1>准备播放</h1>
         <div className="card">
           <p>{active.orchestration.stats.coreUnits} 个核心单元 · {formatMs(active.orchestration.totalMs)}</p>
+          <p className="hint">请佩戴左右声道耳机，本应用只面向立体声耳机播放。</p>
           <button className="btn" onClick={() => void player.start()}>开始</button>
         </div>
       </div>
@@ -150,10 +151,12 @@ export default function PlayerPage() {
   const totalMs = active.orchestration.totalMs + active.orchestration.landing.durationMs
   const progress = Math.min(1, elapsedMs / totalMs)
   const remaining = Math.max(0, (segment?.endMs ?? elapsedMs) - elapsedMs)
-  const symmetryText = segment ? SYMMETRY_LABEL[segment.symmetry] : ''
+  const activityText = segment ? ACTIVITY_LABEL[segment.activity] : ''
+  const directionMark = segment?.directionHint === 'up' ? ' ↗' : segment?.directionHint === 'down' ? ' ↘' : ''
+  const stageDisplay = `${segment?.name ?? ''}${directionMark}`
 
   return (
-    <div className="page player-page">
+    <div className={`page player-page${faceDown ? ' face-down' : ''}`}>
       <div className="card player-card">
         <div className="player-top">
           <span className="phase-label">{PHASE_LABEL[segment?.phase ?? ''] ?? ''}</span>
@@ -175,12 +178,12 @@ export default function PlayerPage() {
           </svg>
           <div className="circle-text">
             <div className="circle-time mono">{formatMs(remaining)}</div>
-            <div className="circle-stage">{segment?.name ?? ''}</div>
+            <div className="circle-stage">{stageDisplay}</div>
           </div>
         </div>
 
         <div className="player-meta">
-          <div>对称度：<b>{symmetryText}</b></div>
+          <div>活动状态：<b>{activityText}</b></div>
           <div>主导侧：<b className={segment?.dominant === 'L' ? 'side-l' : 'side-r'}>{segment?.dominant === 'L' ? 'L 左' : 'R 右'}</b></div>
           <div>总进度：<span className="mono">{formatMs(elapsedMs)} / {formatMs(totalMs)}</span></div>
         </div>
@@ -193,7 +196,7 @@ export default function PlayerPage() {
             <button className="btn ghost big-tap" onClick={player.finishEarly}>结束</button>
           )}
         </div>
-        <p className="hint">息屏可继续播放；扣下手机暂停、翻转继续（设备不支持时可点按钮）</p>
+        <p className="hint">亮屏常亮播放；锁屏/切后台自动暂停；扣下手机暂停并渐隐全黑，翻转继续</p>
       </div>
     </div>
   )

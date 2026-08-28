@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { generateOrchestration } from '../../domain/engine'
-import { STAGE_LABEL, SYMMETRY_LABEL } from '../../domain/types'
+import { ACTIVITY_LABEL, STAGE_LABEL } from '../../domain/types'
 import { loadPrefs } from '../../storage/prefs'
 import { setCurrentSession } from '../../session/currentSession'
 import { navigate } from '../../App'
@@ -86,8 +86,8 @@ export default function HomePage() {
           <h2 className="card-title">编排概览</h2>
           <div className="stats-grid">
             <div><b>{formatMinSec(result.orchestration.stats.totalSec)}</b><span>总时长</span></div>
-            <div><b>{formatMinSec(result.orchestration.stats.stimSec)}</b><span>刺激</span></div>
-            <div><b>{formatMinSec(result.orchestration.stats.restSec)}</b><span>休息</span></div>
+            <div><b>{formatMinSec(result.orchestration.stats.actionSec)}</b><span>有动作</span></div>
+            <div><b>{formatMinSec(result.orchestration.stats.restSec)}</b><span>静置</span></div>
             <div><b>{result.orchestration.stats.warmupUnits}</b><span>热身段</span></div>
             <div><b>{result.orchestration.stats.coreUnits}</b><span>核心单元</span></div>
             <div><b>{result.orchestration.stats.sprintSteps}</b><span>冲刺步</span></div>
@@ -106,7 +106,7 @@ export default function HomePage() {
                 <div className="stage-row" key={st.name}>
                   <span>{STAGE_LABEL[st.name]}</span>
                   <span className="mono">{Math.round(st.durationMs / 1000)}s</span>
-                  <span>{SYMMETRY_LABEL[st.symmetry]}</span>
+                  <span>{ACTIVITY_LABEL[st.activity]}</span>
                 </div>
               ))}
             </div>
@@ -116,7 +116,7 @@ export default function HomePage() {
             <div className="stage-row" key={step.sub}>
               <span>{step.name}</span>
               <span className="mono">{Math.round(step.durationMs / 1000)}s</span>
-              <span>{SYMMETRY_LABEL[step.symmetry]}</span>
+              <span>{ACTIVITY_LABEL[step.activity]}</span>
             </div>
           ))}
         </div>

@@ -120,6 +120,26 @@ export default function SettingsPage() {
       </div>
 
       <div className="card">
+        <h2 className="card-title">播放模式</h2>
+        <label className="setting-line">
+          <input
+            type="checkbox"
+            checked={settings.wakeLock}
+            onChange={(e) => update({ wakeLock: e.target.checked })}
+          />
+          亮屏常亮（Wake Lock）
+        </label>
+        <label className="setting-line">
+          <input
+            type="checkbox"
+            checked={settings.faceDownPause}
+            onChange={(e) => update({ faceDownPause: e.target.checked })}
+          />
+          扣下手机暂停/翻转继续
+        </label>
+      </div>
+
+      <div className="card">
         <h2 className="card-title">振动反馈</h2>
         <label className="setting-line">
           <input
