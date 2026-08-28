@@ -247,6 +247,21 @@ input[type='text'] {
   margin-bottom: 8px;
 }
 
+.progress-track {
+  height: 8px;
+  background: var(--card-2);
+  border-radius: 999px;
+  overflow: hidden;
+  margin: 12px 0 4px;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  border-radius: 999px;
+  transition: width 0.2s linear;
+}
+
 .side-l {
   color: var(--accent-2);
 }

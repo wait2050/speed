@@ -182,6 +182,10 @@ export default function PlayerPage() {
           </div>
         </div>
 
+        <div className="progress-track">
+          <div className="progress-fill" style={{ width: `${progress * 100}%` }} />
+        </div>
+
         <div className="player-meta">
           <div>活动状态：<b>{activityText}</b></div>
           <div>主导侧：<b className={segment?.dominant === 'L' ? 'side-l' : 'side-r'}>{segment?.dominant === 'L' ? 'L 左' : 'R 右'}</b></div>
